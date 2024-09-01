@@ -79,19 +79,6 @@
 <h2>Metadata Providers</h2>
 
 <div class="provider-grid">
-    <div class="provider-card none-provider" data-provider="none">
-        <div class="provider-name">None</div>
-        <div class="provider-status {% if not any_provider_enabled %}active{% else %}inactive{% endif %}">
-            Status: {% if not any_provider_enabled %}Active{% else %}Inactive{% endif %}
-        </div>
-        <div class="provider-actions">
-            {% if not any_provider_enabled %}
-            <button class="disabled-btn" data-provider="none" disabled>Enabled</button>
-            {% else %}
-            <button class="enable-btn" data-provider="none">Enable</button>
-            {% endif %}
-        </div>
-    </div>
     {% for provider in providers %}
     <div class="provider-card" data-provider="{{ provider.name }}">
         <div class="provider-name">{{ provider.name|capitalize }}</div>
@@ -99,23 +86,19 @@
             Status: {% if provider.enabled %}Active{% else %}Inactive{% endif %}
         </div>
         <div class="provider-actions">
-            {% if provider.name == 'trakt' %}
-                {% if trakt_authenticated %}
-                    {% if trakt_enabled %}
-                    <button class="disabled-btn" disabled>Enabled</button>
-                    {% else %}
-                    <button class="enable-btn" data-provider="{{ provider.name }}">Enable</button>
-                    {% endif %}
-                {% else %}
-                    <button class="disabled-btn" disabled>Not Authenticated</button>
-                {% endif %}
-            {% else %}
-                {% if provider.enabled %}
-                <button class="disable-btn" data-provider="{{ provider.name }}">Disable</button>
-                {% else %}
-                <button class="enable-btn" data-provider="{{ provider.name }}">Enable</button>
-                {% endif %}
-            {% endif %}
+            <button class="toggle-btn {% if provider.enabled %}active{% else %}inactive{% endif %}" data-provider="{{ provider.name }}">
+                {% if provider.enabled %}Disable{% else %}Enable{% endif %}
+            </button>
+        </div>
+        <div class="provider-rankings">
+            <label>
+                Metadata Rank:
+                <input type="number" class="rank-input" data-provider="{{ provider.name }}" data-type="metadata" value="{{ provider.metadata_rank }}" min="1" max="{{ providers|length }}">
+            </label>
+            <label>
+                Poster Rank:
+                <input type="number" class="rank-input" data-provider="{{ provider.name }}" data-type="poster" value="{{ provider.poster_rank }}" min="1" max="{{ providers|length }}">
+            </label>
         </div>
     </div>
     {% endfor %}
@@ -123,64 +106,13 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const providerButtons = document.querySelectorAll('.provider-actions button');
+    const toggleButtons = document.querySelectorAll('.toggle-btn');
+    const rankInputs = document.querySelectorAll('.rank-input');
     
-    function updateProviderUI(providers) {
-        const anyProviderEnabled = providers.some(provider => provider.enabled);
-        const noneCard = document.querySelector('.provider-card[data-provider="none"]');
-        const noneStatus = noneCard.querySelector('.provider-status');
-        const noneButton = noneCard.querySelector('.provider-actions button');
-
-        noneStatus.textContent = `Status: ${anyProviderEnabled ? 'Inactive' : 'Active'}`;
-        noneStatus.className = `provider-status ${anyProviderEnabled ? 'inactive' : 'active'}`;
-        
-        if (!anyProviderEnabled) {
-            noneButton.textContent = 'Enabled';
-            noneButton.className = 'disabled-btn';
-            noneButton.disabled = true;
-        } else {
-            noneButton.textContent = 'Enable';
-            noneButton.className = 'enable-btn';
-            noneButton.disabled = false;
-        }
-
-        providers.forEach(provider => {
-            const card = document.querySelector(`.provider-card[data-provider="${provider.name}"]`);
-            if (card) {
-                const statusDiv = card.querySelector('.provider-status');
-                const actionButton = card.querySelector('.provider-actions button');
-                
-                statusDiv.textContent = `Status: ${provider.enabled ? 'Active' : 'Inactive'}`;
-                statusDiv.className = `provider-status ${provider.enabled ? 'active' : 'inactive'}`;
-                
-                if (provider.name === 'trakt') {
-                    if (provider.enabled) {
-                        actionButton.textContent = 'Enabled';
-                        actionButton.className = 'disabled-btn';
-                        actionButton.disabled = true;
-                    } else {
-                        actionButton.textContent = 'Enable';
-                        actionButton.className = 'enable-btn';
-                        actionButton.disabled = false;
-                    }
-                } else {
-                    if (provider.enabled) {
-                        actionButton.textContent = 'Disable';
-                        actionButton.className = 'disable-btn';
-                    } else {
-                        actionButton.textContent = 'Enable';
-                        actionButton.className = 'enable-btn';
-                    }
-                    actionButton.disabled = false;
-                }
-            }
-        });
-    }
-    
-    providerButtons.forEach(button => {
+    toggleButtons.forEach(button => {
         button.addEventListener('click', function() {
             const providerName = this.getAttribute('data-provider');
-            const action = this.classList.contains('enable-btn') ? 'enable' : 'disable';
+            const action = this.classList.contains('active') ? 'disable' : 'enable';
             
             fetch('/toggle_provider', {
                 method: 'POST',
@@ -203,6 +135,55 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
+
+    rankInputs.forEach(input => {
+        input.addEventListener('change', function() {
+            const providerName = this.getAttribute('data-provider');
+            const rankType = this.getAttribute('data-type');
+            const newRank = this.value;
+
+            fetch('/update_provider_rank', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ provider: providerName, type: rankType, rank: newRank })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateProviderUI(data.providers);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        });
+    });
+
+    function updateProviderUI(providers) {
+        providers.forEach(provider => {
+            const card = document.querySelector(`.provider-card[data-provider="${provider.name}"]`);
+            if (card) {
+                const statusDiv = card.querySelector('.provider-status');
+                const actionButton = card.querySelector('.toggle-btn');
+                const metadataRankInput = card.querySelector('.rank-input[data-type="metadata"]');
+                const posterRankInput = card.querySelector('.rank-input[data-type="poster"]');
+                
+                statusDiv.textContent = `Status: ${provider.enabled ? 'Active' : 'Inactive'}`;
+                statusDiv.className = `provider-status ${provider.enabled ? 'active' : 'inactive'}`;
+                
+                actionButton.textContent = provider.enabled ? 'Disable' : 'Enable';
+                actionButton.className = `toggle-btn ${provider.enabled ? 'active' : 'inactive'}`;
+                
+                metadataRankInput.value = provider.metadata_rank;
+                posterRankInput.value = provider.poster_rank;
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

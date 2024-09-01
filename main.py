@@ -1,11 +1,12 @@
 from app import app
-from settings import Settings
+from app.settings import Settings
 from app.database import Base, engine
 from app.metadata_manager import MetadataManager
 import threading
 import time
 import logging
 import os
+from sqlalchemy import inspect
 
 settings = Settings()
 
@@ -26,8 +27,21 @@ def setup_logging():
     )
 
 def initialize_database():
-    Base.metadata.create_all(engine)
-    logging.info("Database initialized.")
+    inspector = inspect(engine)
+    if not inspector.has_table("episodes"):
+        Base.metadata.create_all(engine)
+        logging.info("Database initialized with all tables.")
+    else:
+        # Check if the 'overview' column exists in the 'episodes' table
+        columns = inspector.get_columns("episodes")
+        column_names = [column['name'] for column in columns]
+        if 'overview' not in column_names:
+            # Add the 'overview' column to the 'episodes' table
+            with engine.connect() as connection:
+                connection.execute("ALTER TABLE episodes ADD COLUMN overview TEXT")
+            logging.info("Added 'overview' column to 'episodes' table.")
+        else:
+            logging.info("Database schema is up-to-date.")
 
 def refresh_metadata_task():
     while True:

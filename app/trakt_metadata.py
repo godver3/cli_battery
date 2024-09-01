@@ -6,7 +6,7 @@ import pickle
 from typing import Dict, Any, List, Tuple
 from urllib.parse import urlparse, urlencode
 import requests
-from settings import Settings
+from app.settings import Settings
 import trakt.core
 from trakt import init
 from trakt.users import User
@@ -90,68 +90,101 @@ class TraktMetadata:
             return []
 
     def get_metadata(self, imdb_id: str) -> Dict[str, Any]:
-        # Try to get movie metadata first
-        movie_metadata = self.get_movie_metadata(imdb_id)
-        if movie_metadata:
-            return {'type': 'movie', 'metadata': movie_metadata}
-        
-        # If not a movie, try to get TV show metadata
-        show_metadata = self.get_show_metadata(imdb_id)
-        if show_metadata:
-            return {'type': 'show', 'metadata': show_metadata}
-        
+        show_data = self._get_show_data(imdb_id)
+        if show_data:
+            return {
+                'type': 'show',
+                'metadata': show_data
+            }
+
+        movie_data = self._get_movie_data(imdb_id)
+        if movie_data:
+            return {
+                'type': 'movie',
+                'metadata': movie_data
+            }
+
         return None
 
-    def get_movie_metadata(self, imdb_id):
-        headers = self._get_headers()
-        response = requests.get(f"{self.base_url}/movies/{imdb_id}?extended=full", headers=headers)
-        
-        if response.status_code == 200:
+    def _get_show_data(self, imdb_id):
+        url = f"{self.base_url}/shows/{imdb_id}?extended=full"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
             return response.json()
-        else:
-            logging.error(f"Failed to fetch movie metadata from Trakt: {response.text}")
-            return None
+        return None
 
-    def get_show_metadata(self, imdb_id):
-        headers = self._get_headers()
-        response = requests.get(f"{self.base_url}/shows/{imdb_id}?extended=full", headers=headers)
-        
-        if response.status_code == 200:
+    def _get_movie_data(self, imdb_id):
+        url = f"{self.base_url}/movies/{imdb_id}?extended=full"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
             return response.json()
-        else:
-            logging.error(f"Failed to fetch show metadata from Trakt: {response.text}")
-            return None
+        return None
 
     def get_show_seasons(self, imdb_id):
-        headers = self._get_headers()
-        response = requests.get(f"{self.base_url}/shows/{imdb_id}/seasons?extended=full,episodes", headers=headers)
-        
-        if response.status_code == 200:
+        url = f"{self.base_url}/shows/{imdb_id}/seasons?extended=full"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
             seasons_data = response.json()
+            processed_seasons = []
             for season in seasons_data:
-                if 'episodes' in season:
-                    for episode in season['episodes']:
-                        episode['airdate'] = self._parse_date(episode.get('first_aired'))
-            return seasons_data
-        else:
-            logging.error(f"Failed to fetch show seasons from Trakt: {response.text}")
-            return None
-
-    def _parse_date(self, date_string):
-        if date_string:
-            try:
-                return datetime.strptime(date_string, "%Y-%m-%dT%H:%M:%S.%fZ")
-            except ValueError:
-                return None
+                if season['number'] is not None and season['number'] > 0:
+                    processed_seasons.append({
+                        'season': season['number'],
+                        'episode_count': season.get('episode_count', 0),
+                        'aired_episodes': season.get('aired_episodes', 0),
+                        'title': season.get('title', f"Season {season['number']}"),
+                        'overview': season.get('overview', ''),
+                    })
+            return processed_seasons
         return None
 
-    def _get_headers(self):
-        return {
+    def get_show_episodes(self, imdb_id):
+        url = f"{self.base_url}/shows/{imdb_id}/seasons?extended=full,episodes"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
+            seasons_data = response.json()
+            processed_episodes = []
+            for season in seasons_data:
+                if season['number'] is not None and season['number'] > 0:
+                    for episode in season.get('episodes', []):
+                        first_aired = None
+                        if episode.get('first_aired'):
+                            try:
+                                first_aired = datetime.strptime(episode['first_aired'], "%Y-%m-%dT%H:%M:%S.%fZ")
+                            except ValueError:
+                                # If the format is different, try without milliseconds
+                                first_aired = datetime.strptime(episode['first_aired'], "%Y-%m-%dT%H:%M:%SZ")
+
+                        processed_episodes.append({
+                            'season': season['number'],
+                            'episode': episode['number'],
+                            'title': episode.get('title', ''),
+                            'overview': episode.get('overview', ''),
+                            'runtime': episode.get('runtime', 0),
+                            'first_aired': first_aired,  # Now a datetime object
+                        })
+            return processed_episodes
+        return None
+
+    def _make_request(self, url):
+        headers = {
             'Content-Type': 'application/json',
             'trakt-api-version': '2',
             'trakt-api-key': self.client_id,
             'Authorization': f'Bearer {self.settings.Trakt["access_token"]}'
         }
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error making request to Trakt API: {e}")
+            logging.error(f"URL: {url}")
+            logging.error(f"Headers: {headers}")
+            if hasattr(e, 'response') and e.response is not None:
+                logging.error(f"Response status code: {e.response.status_code}")
+                logging.error(f"Response text: {e.response.text}")
+            return None
 
     def refresh_metadata(self, imdb_id: str) -> Dict[str, Any]:
         return self.get_metadata(imdb_id)
@@ -222,6 +255,9 @@ class TraktMetadata:
         else:
             logging.error(f"Failed to fetch movie metadata from Trakt: {response.text}")
             return None
+
+    def get_poster(self, imdb_id: str) -> str:
+        return "Posters not available through Trakt API"
 
 # Add this to your MetadataManager class
 def refresh_trakt_metadata(self, imdb_id: str) -> None:

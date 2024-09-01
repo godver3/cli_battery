@@ -1,6 +1,6 @@
 from flask import render_template, request, jsonify, send_file, redirect, url_for
 from app import app
-from settings import Settings
+from app.settings import Settings
 from app.metadata_manager import MetadataManager
 import io
 import logging
@@ -52,11 +52,21 @@ def delete_item(imdb_id):
 
 @app.route('/poster/<imdb_id>')
 def get_poster(imdb_id):
+    settings = Settings()
+    if all(provider['name'] == 'trakt' for provider in settings.providers if provider['enabled']):
+        return jsonify({
+            "error": "Posters not available",
+            "message": "Posters are not available through the Trakt API. Enable another metadata provider to access posters."
+        }), 404
+    
     poster = MetadataManager.get_poster(imdb_id)
-    if poster and poster.image_data:
-        return send_file(io.BytesIO(poster.image_data), mimetype='image/jpeg')
+    if poster:
+        return send_file(io.BytesIO(poster), mimetype='image/jpeg')
     else:
-        return 'Poster not found', 404
+        return jsonify({
+            "error": "Poster not found",
+            "message": f"No poster found for IMDB ID: {imdb_id}"
+        }), 404
 
 @app.route('/metadata')
 def metadata():
@@ -67,6 +77,17 @@ def metadata():
 def providers():
     settings = Settings()
     providers = settings.providers
+    
+    # Ensure all providers have both rank types
+    for i, provider in enumerate(providers, start=1):
+        if 'metadata_rank' not in provider:
+            provider['metadata_rank'] = i
+        if 'poster_rank' not in provider:
+            provider['poster_rank'] = i
+    
+    settings.providers = providers
+    settings.save()
+    
     any_provider_enabled = any(provider['enabled'] for provider in providers)
     
     # Check if Trakt is authenticated and enabled
@@ -101,22 +122,12 @@ def toggle_provider():
     settings = Settings()
     providers = settings.providers
 
-    if provider_name == 'none':
-        # Disable all providers
-        for provider in providers:
-            provider['enabled'] = False
+    for provider in providers:
+        if provider['name'] == provider_name:
+            provider['enabled'] = (action == 'enable')
+            break
     else:
-        for provider in providers:
-            if provider['name'] == provider_name:
-                provider['enabled'] = (action == 'enable')
-                if provider['enabled'] and provider_name != 'trakt':
-                    # Disable all other providers except Trakt
-                    for other_provider in providers:
-                        if other_provider['name'] != provider_name and other_provider['name'] != 'trakt':
-                            other_provider['enabled'] = False
-                break
-        else:
-            return jsonify({'success': False, 'error': 'Provider not found'}), 404
+        return jsonify({'success': False, 'error': 'Provider not found'}), 404
     
     settings.providers = providers
     settings.save()
@@ -124,6 +135,24 @@ def toggle_provider():
     return jsonify({
         'success': True, 
         'providers': providers
+    })
+
+@app.route('/update_provider_rank', methods=['POST'])
+def update_provider_rank():
+    data = request.json
+    provider_name = data.get('provider')
+    rank_type = data.get('type')
+    new_rank = data.get('rank')
+
+    if rank_type not in ['metadata', 'poster']:
+        return jsonify({'success': False, 'error': 'Invalid rank type'}), 400
+
+    MetadataManager.update_provider_rank(provider_name, rank_type, new_rank)
+
+    settings = Settings()
+    return jsonify({
+        'success': True,
+        'providers': settings.providers
     })
 
 @app.route('/settings')
@@ -165,63 +194,39 @@ def get_metadata(imdb_id):
     metadata_type = request.args.get('type', 'all')
     force_refresh = request.args.get('refresh', 'false').lower() == 'true'
     
-    local_metadata = MetadataManager.get_metadata(imdb_id, metadata_type)
+    logging.info(f"Fetching metadata for IMDB ID: {imdb_id}, type: {metadata_type}, force refresh: {force_refresh}")
     
-    if local_metadata and not force_refresh:
-        logging.info(f"Metadata for {imdb_id} found in local battery.")
-        return jsonify({"source": "battery", "type": local_metadata.get('type', 'unknown'), "metadata": local_metadata})
+    result = MetadataManager.get_metadata(imdb_id, metadata_type, force_refresh)
     
-    # If force_refresh is True or no local metadata, fetch from Trakt
-    trakt = TraktMetadata()
-    if not trakt.is_authenticated():
-        return jsonify({"error": "Trakt is not authenticated"}), 401
-    
-    trakt_data = trakt.get_metadata(imdb_id)
-    
-    if trakt_data:
-        metadata = trakt_data['metadata']
-        metadata['type'] = trakt_data['type']  # Ensure type is included in metadata
-        
-        # Update this line to pass the correct arguments
-        MetadataManager.add_or_update_metadata(imdb_id, metadata, 'Trakt')
-        
-        if trakt_data['type'] == 'show':
-            seasons_data = trakt.get_show_seasons(imdb_id)
-            if seasons_data:
-                MetadataManager.add_or_update_seasons(imdb_id, seasons_data, 'Trakt')
-        
-        logging.info(f"Metadata for {imdb_id} fetched from Trakt and saved to battery.")
-        
-        # Filter metadata based on metadata_type if needed
-        if metadata_type != 'all':
-            filtered_metadata = {k: v for k, v in metadata.items() if k == metadata_type}
-            return jsonify({"source": "trakt", "type": trakt_data['type'], "metadata": filtered_metadata})
-        
-        return jsonify({"source": "trakt", "type": trakt_data['type'], "metadata": metadata})
+    if result:
+        logging.info(f"Metadata for {imdb_id} found. Source: {result['source']}")
+        return jsonify(result)
     else:
         return jsonify({"error": "Item not found"}), 404
 
 @app.route('/api/seasons/<imdb_id>', methods=['GET'])
 def get_seasons(imdb_id):
-    settings = Settings()
-    if not any(provider['enabled'] for provider in settings.providers):
-        return jsonify({"error": "No active metadata provider"}), 400
-        
     try:
+        logging.info(f"Fetching seasons for IMDB ID: {imdb_id}")
         seasons = MetadataManager.get_seasons(imdb_id)
         if seasons:
-            return jsonify({"seasons": seasons})
+            logging.info(f"Successfully retrieved seasons for IMDB ID: {imdb_id}")
+            return jsonify(seasons)
         else:
+            logging.warning(f"No seasons found for IMDB ID: {imdb_id}")
             # Check if the item exists and if it's a TV show
             item = MetadataManager.get_metadata(imdb_id)
             if not item:
+                logging.error(f"No item found for IMDB ID: {imdb_id}")
                 return jsonify({"error": f"No item found for IMDB ID: {imdb_id}"}), 404
             elif item.get('type') != 'show':
+                logging.error(f"Item with IMDB ID {imdb_id} is not a TV show")
                 return jsonify({"error": f"Item with IMDB ID {imdb_id} is not a TV show"}), 400
             else:
+                logging.error(f"No seasons found for TV show with IMDB ID: {imdb_id}")
                 return jsonify({"error": f"No seasons found for TV show with IMDB ID: {imdb_id}"}), 404
     except Exception as e:
-        logging.error(f"Error in get_seasons: {str(e)}")
+        logging.error(f"Error in get_seasons: {str(e)}", exc_info=True)
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
 @app.route('/authorize_trakt')

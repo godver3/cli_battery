@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 from app import app
 from app.metadata_manager import MetadataManager
 from app.trakt_metadata import TraktMetadata
-from settings import Settings
+from app.settings import Settings
 from flask import url_for  # Import the Flask url_for function
 
 class TestRoutes(unittest.TestCase):

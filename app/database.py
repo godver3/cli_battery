@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, LargeBinary, Float
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, LargeBinary, Float, Text
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
@@ -47,8 +47,9 @@ class Episode(Base):
     season_id = Column(Integer, ForeignKey('seasons.id'), nullable=False)
     episode_number = Column(Integer, nullable=False)
     title = Column(String)
+    overview = Column(Text)
     runtime = Column(Integer)
-    airdate = Column(DateTime)
+    first_aired = Column(DateTime)  # Change 'airdate' to 'first_aired'
     season = relationship("Season", back_populates="episodes")
 
 class Poster(Base):

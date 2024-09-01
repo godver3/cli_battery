@@ -3,7 +3,9 @@
     "providers": [
         {
             "name": "trakt",
-            "enabled": true
+            "enabled": true,
+            "metadata_rank": 3,
+            "poster_rank": 3
         }
     ],
     "trakt_client_id": "",

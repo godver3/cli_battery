@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>cli_battery - {% block title %}{% endblock %}</title>
+    
+    <!-- Favicon and other meta tags -->
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+    <meta name="msapplication-TileColor" content="#007bff">
+    <meta name="msapplication-TileImage" content="{{ url_for('static', filename='mstile-144x144.png') }}">
+    <link rel="mask-icon" href="{{ url_for('static', filename='safari-pinned-tab.svg') }}" color="#007bff">
+    <meta name="theme-color" content="#007bff">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <img src="{{ url_for('static', filename='icon-32x32.png') }}" alt="CLI Battery icon" class="header-icon">
+            <div class="title-version">
+                <h1>cli_battery</h1>
+                <span class="version-info">v0.1.0</span>
+            </div>
+        </div>
+        <button class="hamburger" aria-label="Toggle menu">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        <nav>
+            <ul>
+                <li><a href="{{ url_for('home') }}">Home</a></li>
+                <li><a href="{{ url_for('providers') }}">Providers</a></li>
+                <li><a href="{{ url_for('settings_page') }}">Settings</a></li>
+                <li><a href="{{ url_for('debug') }}">Debug</a></li>
+            </ul>
+        </nav>
+        <div class="header-controls">
+            <div class="stats-display">
+                <span class="stat-item">
+                    <i class="fas fa-database"></i>
+                    Items: {{ stats.total_items }}
+                </span>
+                <span class="stat-item">
+                    <i class="fas fa-tags"></i>
+                    Metadata: {{ stats.total_metadata }}
+                </span>
+                <span class="stat-item">
+                    <i class="fas fa-clock"></i>
+                    Last Update: {{ stats.last_update }}
+                </span>
+            </div>
+        </div>
+    </header>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    {% block extra_js %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/menu.js') }}"></script>
+</body>
+</html>

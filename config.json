@@ -1,0 +1,23 @@
+{
+    "active_provider": "none",
+    "providers": [
+        {
+            "name": "trakt",
+            "enabled": true
+        }
+    ],
+    "trakt_client_id": "",
+    "trakt_client_secret": "",
+    "update_frequency": 60,
+    "max_entries": 1000,
+    "log_level": "INFO",
+    "database_path": "db_content/cli_battery.db",
+    "Trakt": {
+        "client_id": "f6459c965973e24566f1cc8ba8e93cee81373c46fa8c11b65727441d10fbb71d",
+        "client_secret": "6301ad0f1730dc4a23d3a65282563174408e9db94ac23e386d0ce058aa63e42b",
+        "update_frequency": 60,
+        "access_token": "c690d40f6507dfcd8ce0636ee2424689fb21c8c3b9ac7d42b135d325e0ef207b",
+        "refresh_token": "be2066c208fa30a958a704bf40b898662579c6c6171af9877353cba923d4ff15",
+        "expires_at": "2024-12-01T07:05:49.509213"
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "update_frequency": 30,
+    "max_entries": 1000,
+    "providers": [],
+    "log_level": "INFO",
+    "database_path": "metadata.db",
+    "Trakt": {
+        "client_id": "f6459c965973e24566f1cc8ba8e93cee81373c46fa8c11b65727441d10fbb71d",
+        "client_secret": "6301ad0f1730dc4a23d3a65282563174408e9db94ac23e386d0ce058aa63e42b",
+        "update_frequency": 60,
+        "access_token": "6c7f13bb6ade1e5acebdebe3cb8f910aec4c521c556f11c72fccd2bd64282485",
+        "refresh_token": "57df2b0850a3557e81aaf71e66a2669ea05f1df6c26d43286849b9d5e7ec39c2",
+        "expires_in": 7889237,
+        "expires_at": "2024-12-01T06:22:05.868998"
+    }
+}

@@ -1,1 +1,1 @@
-![Python Tests](https://github.com/yourusername/yourrepository/workflows/Python%20Tests/badge.svg)
+![Python Tests](https://github.com/godver3/cli_battery/Python%20Tests/badge.svg)

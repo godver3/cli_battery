@@ -244,7 +244,7 @@ def trakt_callback():
             flash("Trakt authorization failed. Please try again.", "error")
     else:
         flash("No authorization code received from Trakt.", "error")
-    return redirect(url_for('settings'))
+    return redirect(url_for('settings_page'))  # Change 'settings' to 'settings_page'
 
 @app.route('/check_trakt_auth')
 def check_trakt_auth():

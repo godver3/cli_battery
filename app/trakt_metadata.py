@@ -14,6 +14,8 @@ from trakt.movies import Movie
 from trakt.tv import TVShow
 from flask import url_for
 from datetime import datetime, timedelta
+import iso8601
+from datetime import timezone
 
 TRAKT_API_URL = "https://api.trakt.tv"
 CACHE_FILE = 'db_content/trakt_last_activity.pkl'
@@ -23,8 +25,8 @@ class TraktMetadata:
     def __init__(self):
         self.settings = Settings()
         self.base_url = "https://api.trakt.tv"
-        self.client_id = self.settings.Trakt['client_id']
-        self.client_secret = self.settings.Trakt['client_secret']
+        self.client_id = self.settings.Trakt.get('client_id')
+        self.client_secret = self.settings.Trakt.get('client_secret')
         self.redirect_uri = "http://192.168.1.51:5001/trakt_callback"
 
         # Log Trakt settings for debugging
@@ -55,34 +57,11 @@ class TraktMetadata:
         }
 
     def ensure_trakt_auth(self):
-        logging.info("Starting Trakt authentication check")
-        
-        client_id = self.settings.get('Trakt', 'client_id')
-        client_secret = self.settings.get('Trakt', 'client_secret')
-        
-        logging.info(f"Client ID: {client_id}, Client Secret: {'*' * len(client_secret) if client_secret else 'Not set'}")
-        
-        if not client_id or not client_secret:
-            logging.error("Trakt client ID or secret not set. Please configure in settings.")
+        if not self.client_id or not self.client_secret:
+            raise ValueError("Trakt client ID and secret must be set")
+        if self.is_authenticated():
             return None
-        
-        try:
-            device_code_response = self.get_device_code(client_id, client_secret)
-            user_code = device_code_response['user_code']
-            device_code = device_code_response['device_code']
-            verification_url = device_code_response['verification_url']
-            
-            logging.info(f"Authorization code generated: {user_code}")
-            logging.info(f"Verification URL: {verification_url}")
-            
-            return {
-                'user_code': user_code,
-                'device_code': device_code,
-                'verification_url': verification_url
-            }
-        except Exception as e:
-            logging.error(f"Error during Trakt authorization: {str(e)}")
-            return None
+        return self.get_device_code()
 
     def get_device_code(self, client_id: str, client_secret: str) -> Dict[str, Any]:
         url = f"{TRAKT_API_URL}/oauth/device/code"
@@ -221,11 +200,13 @@ class TraktMetadata:
             json.dump(credentials, f)
 
     def is_authenticated(self):
-        return (
-            self.settings.Trakt.get('access_token') and
-            self.settings.Trakt.get('expires_at') and
-            datetime.fromisoformat(self.settings.Trakt['expires_at']) > datetime.now()
-        )
+        access_token = self.settings.Trakt.get('access_token')
+        expires_at = self.settings.Trakt.get('expires_at')
+        if not access_token or not expires_at:
+            return False
+        expires_at = iso8601.parse_date(expires_at)
+        now = datetime.now(timezone.utc)
+        return now < expires_at.astimezone(timezone.utc)
 
     def get_movie_metadata(self, imdb_id):
         headers = {

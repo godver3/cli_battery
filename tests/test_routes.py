@@ -72,12 +72,21 @@ class TestRoutes(unittest.TestCase):
 
     @patch('app.routes.MetadataManager.get_poster')
     def test_get_poster_route(self, mock_get_poster):
+        mock_settings.return_value.providers = [{'name': 'test', 'enabled': True}]
+        
+        # Test successful poster retrieval
         mock_poster = MagicMock()
         mock_poster.image_data = b'fake_image_data'
         mock_get_poster.return_value = mock_poster
         response = self.app.get('/poster/tt1234567')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, b'fake_image_data')
+
+        # Test poster not found
+        mock_get_poster.return_value = None
+        response = self.app.get('/poster/tt1234567')
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('error', response.json)
 
     @patch('app.routes.Settings')
     @patch('app.routes.TraktMetadata')

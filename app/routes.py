@@ -59,14 +59,18 @@ def get_poster(imdb_id):
             "message": "Posters are not available through the Trakt API. Enable another metadata provider to access posters."
         }), 404
     
-    poster = MetadataManager.get_poster(imdb_id)
-    if poster:
-        return send_file(io.BytesIO(poster), mimetype='image/jpeg')
-    else:
-        return jsonify({
-            "error": "Poster not found",
-            "message": f"No poster found for IMDB ID: {imdb_id}"
-        }), 404
+    try:
+        poster = MetadataManager.get_poster(imdb_id)
+        if poster:
+            return send_file(io.BytesIO(poster), mimetype='image/jpeg')
+        else:
+            return jsonify({
+                "error": "Poster not found",
+                "message": f"No poster found for IMDB ID: {imdb_id}"
+            }), 404
+    except Exception as e:
+        logging.error(f"Error fetching poster for {imdb_id}: {str(e)}", exc_info=True)
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
 @app.route('/metadata')
 def metadata():
@@ -196,13 +200,17 @@ def get_metadata(imdb_id):
     
     logging.info(f"Fetching metadata for IMDB ID: {imdb_id}, type: {metadata_type}, force refresh: {force_refresh}")
     
-    result = MetadataManager.get_metadata(imdb_id, metadata_type, force_refresh)
-    
-    if result:
-        logging.info(f"Metadata for {imdb_id} found. Source: {result['source']}")
-        return jsonify(result)
-    else:
-        return jsonify({"error": "Item not found"}), 404
+    try:
+        result = MetadataManager.get_metadata(imdb_id, metadata_type, force_refresh)
+        
+        if result:
+            logging.info(f"Metadata for {imdb_id} found. Source: {result['source']}")
+            return jsonify(result)
+        else:
+            return jsonify({"error": "Item not found"}), 404
+    except Exception as e:
+        logging.error(f"Error fetching metadata for {imdb_id}: {str(e)}", exc_info=True)
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
 @app.route('/api/seasons/<imdb_id>', methods=['GET'])
 def get_seasons(imdb_id):
@@ -211,7 +219,7 @@ def get_seasons(imdb_id):
         seasons = MetadataManager.get_seasons(imdb_id)
         if seasons:
             logging.info(f"Successfully retrieved seasons for IMDB ID: {imdb_id}")
-            return jsonify(seasons)
+            return jsonify({"seasons": seasons})
         else:
             logging.warning(f"No seasons found for IMDB ID: {imdb_id}")
             # Check if the item exists and if it's a TV show

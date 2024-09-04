@@ -1,9 +1,11 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, create_autospec, MagicMock, patch
 from app.metadata_manager import MetadataManager
 from app.database import Item, Metadata
 from datetime import datetime
 from sqlalchemy import func
+from app.database import Item, Season, Episode
+from app.trakt_metadata import TraktMetadata
 
 class TestMetadataManager(unittest.TestCase):
 
@@ -55,24 +57,86 @@ class TestMetadataManager(unittest.TestCase):
         self.assertIsNotNone(stats['last_update'])
 
     @patch('app.metadata_manager.Session')
-    def test_get_seasons(self, mock_session):
-        mock_session_instance = MagicMock()
-        mock_session.return_value.__enter__.return_value = mock_session_instance
-        mock_session_instance.query.return_value.filter_by.return_value.all.return_value = [
-            MagicMock(season_number=1, episode_count=10),
-            MagicMock(season_number=2, episode_count=12)
+    @patch('app.metadata_manager.TraktMetadata')
+    def test_get_seasons(self, mock_trakt, mock_session):
+        mock_session_instance = mock_session.return_value.__enter__.return_value
+
+        # Test case 1: Data available in local database
+        self._setup_local_db_mocks(mock_session_instance)
+        seasons = MetadataManager.get_seasons('tt1234567')
+        print(f"Test case 1 - Seasons from database: {seasons}")  # Add this line
+        self._assert_seasons_data(seasons)
+
+        # Reset mocks for the second test case
+        mock_session_instance.reset_mock()
+
+        # Test case 2: Data not in local database, fetch from Trakt
+        self._setup_trakt_mocks(mock_trakt, mock_session_instance)
+        seasons = MetadataManager.get_seasons('tt7654321')
+        print(f"Test case 2 - Seasons from Trakt: {seasons}")  # Add this line
+        self._assert_seasons_data(seasons)
+
+    def _setup_local_db_mocks(self, mock_session_instance):
+        mock_item = MagicMock(spec=Item, id=1)
+        mock_session_instance.query.return_value.filter_by.return_value.first.return_value = mock_item
+
+        mock_seasons = [
+            MagicMock(spec=Season, id=1, season_number=1, episode_count=10),
+            MagicMock(spec=Season, id=2, season_number=2, episode_count=12)
+        ]
+        mock_episodes = [
+            [MagicMock(spec=Episode, episode_number=1, title="S1E1", first_aired=datetime.now(), runtime=30),
+            MagicMock(spec=Episode, episode_number=2, title="S1E2", first_aired=datetime.now(), runtime=30)],
+            [MagicMock(spec=Episode, episode_number=1, title="S2E1", first_aired=datetime.now(), runtime=30),
+            MagicMock(spec=Episode, episode_number=2, title="S2E2", first_aired=datetime.now(), runtime=30)]
         ]
 
-        seasons = MetadataManager.get_seasons('tt1234567')
+        def side_effect(*args, **kwargs):
+            if args[0] == Item:
+                return mock_session_instance.query.return_value
+            elif args[0] == Season:
+                return MagicMock(filter_by=MagicMock(return_value=MagicMock(all=MagicMock(return_value=mock_seasons))))
+            elif args[0] == Episode:
+                return MagicMock(filter_by=MagicMock(return_value=MagicMock(all=MagicMock(side_effect=mock_episodes))))
+            return MagicMock()
+
+        mock_session_instance.query.side_effect = side_effect
+    def _setup_trakt_mocks(self, mock_trakt, mock_session_instance):
+        # Mock empty database results
+        mock_session_instance.query.return_value.filter_by.return_value.first.return_value = MagicMock(spec=Item, id=1)
+        mock_session_instance.query.return_value.filter_by.return_value.all.return_value = []
+
+        mock_trakt_instance = mock_trakt.return_value
+        mock_trakt_instance.get_show_seasons.return_value = [
+            {'season': 1, 'episode_count': 10},
+            {'season': 2, 'episode_count': 12}
+        ]
+        mock_trakt_instance.get_show_episodes.return_value = [
+            {'season': 1, 'episode': 1, 'title': 'S1E1', 'first_aired': datetime.now(), 'runtime': 30},
+            {'season': 1, 'episode': 2, 'title': 'S1E2', 'first_aired': datetime.now(), 'runtime': 30},
+            {'season': 2, 'episode': 1, 'title': 'S2E1', 'first_aired': datetime.now(), 'runtime': 30},
+            {'season': 2, 'episode': 2, 'title': 'S2E2', 'first_aired': datetime.now(), 'runtime': 30}
+        ]
+
+    def _assert_seasons_data(self, seasons):
         self.assertIsNotNone(seasons)
-        self.assertIsInstance(seasons, list)
-        if seasons:
-            self.assertEqual(seasons[0]['season'], 1)
-            self.assertEqual(seasons[0]['episode_count'], 10)
-            self.assertEqual(seasons[1]['season'], 2)
-            self.assertEqual(seasons[1]['episode_count'], 12)
-        else:
-            self.assertEqual(len(seasons), 0)
+        self.assertIsInstance(seasons, dict)
+        self.assertEqual(len(seasons), 2)
+        
+        for season_number, season_data in seasons.items():
+            self.assertIn('episode_count', season_data)
+            self.assertIn('episodes', season_data)
+            self.assertIsInstance(season_data['episodes'], dict)
+            
+            if season_number == 1:
+                self.assertEqual(season_data['episode_count'], 10)
+            elif season_number == 2:
+                self.assertEqual(season_data['episode_count'], 12)
+            
+            for episode_number, episode_data in season_data['episodes'].items():
+                self.assertIn('title', episode_data)
+                self.assertIn('first_aired', episode_data)
+                self.assertIn('runtime', episode_data)
 
     # Add more test methods for other MetadataManager functions
 

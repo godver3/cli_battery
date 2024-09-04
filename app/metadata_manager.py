@@ -85,7 +85,7 @@ class MetadataManager:
                         return {
                             "source": "battery", 
                             "metadata": metadata,
-                            "type": item.type  # Include the item type from the battery
+                            "type": item.type
                         }
 
         logging.info(f"Fetching metadata for {imdb_id} from Trakt")
@@ -102,7 +102,7 @@ class MetadataManager:
                 "metadata": metadata, 
                 "type": trakt_data['type']
             }
-        
+
         logging.warning(f"No metadata found for {imdb_id}")
         return None
 
@@ -185,15 +185,19 @@ class MetadataManager:
     def get_seasons(imdb_id):
         with Session() as session:
             item = session.query(Item).filter_by(imdb_id=imdb_id).first()
+            print(f"Item query result: {item}")
             if not item:
                 logging.info(f"Item with IMDB ID {imdb_id} not found in battery")
                 return None
 
             seasons = session.query(Season).filter_by(item_id=item.id).all()
+            print(f"Seasons query result: {seasons}")
             if seasons:
                 seasons_dict = {}
                 for season in seasons:
+                    print(f"Processing season: {season.season_number}")
                     episodes = session.query(Episode).filter_by(season_id=season.id).all()
+                    print(f"Episodes query result for season {season.season_number}: {episodes}")
                     seasons_dict[season.season_number] = {
                         'episode_count': season.episode_count,
                         'episodes': {
@@ -206,15 +210,19 @@ class MetadataManager:
                         }
                     }
                 logging.info(f"Seasons and episodes for {imdb_id} retrieved from battery")
+                print(f"Seasons dict from database: {seasons_dict}")
                 return seasons_dict
 
         logging.info(f"Seasons for {imdb_id} not found in battery, fetching from Trakt")
         trakt = TraktMetadata()
         trakt_seasons = trakt.get_show_seasons(imdb_id)
         trakt_episodes = trakt.get_show_episodes(imdb_id)
+        print(f"Trakt seasons: {trakt_seasons}")  # Add this line
+        print(f"Trakt episodes: {trakt_episodes}")  # Add this line
         if trakt_seasons and trakt_episodes:
             seasons_dict = MetadataManager._process_trakt_seasons(item.id, trakt_seasons, trakt_episodes)
             logging.info(f"Seasons and episodes for {imdb_id} fetched from Trakt and saved to battery")
+            print(f"Seasons dict from Trakt: {seasons_dict}")  # Add this line
             return seasons_dict
         
         logging.info(f"No seasons found for {imdb_id} in Trakt")
@@ -243,7 +251,7 @@ class MetadataManager:
                         title=ep_data['title'],
                         overview=ep_data.get('overview', ''),
                         runtime=ep_data.get('runtime', 0),
-                        first_aired=ep_data.get('first_aired')  # Now a datetime object
+                        first_aired=ep_data.get('first_aired')
                     )
                     session.add(episode)
                     episodes_dict[ep_data['episode']] = {

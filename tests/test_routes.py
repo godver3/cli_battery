@@ -71,13 +71,12 @@ class TestRoutes(unittest.TestCase):
         self.assertEqual(response.json, {"success": True})
 
     @patch('app.routes.MetadataManager.get_poster')
-    def test_get_poster_route(self, mock_get_poster):
+    @patch('app.routes.Settings')
+    def test_get_poster_route(self, mock_settings, mock_get_poster):
         mock_settings.return_value.providers = [{'name': 'test', 'enabled': True}]
         
         # Test successful poster retrieval
-        mock_poster = MagicMock()
-        mock_poster.image_data = b'fake_image_data'
-        mock_get_poster.return_value = mock_poster
+        mock_get_poster.return_value = b'fake_image_data'
         response = self.app.get('/poster/tt1234567')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, b'fake_image_data')
@@ -123,7 +122,11 @@ class TestRoutes(unittest.TestCase):
     @patch('app.routes.MetadataManager.get_metadata')
     @patch('app.routes.TraktMetadata')
     def test_get_metadata_route(self, mock_trakt, mock_get_metadata):
-        mock_get_metadata.return_value = {'title': 'Test Movie', 'year': 2021}
+        mock_get_metadata.return_value = {
+            'source': 'battery',
+            'metadata': {'title': 'Test Movie', 'year': 2021},
+            'type': 'movie'
+        }
         mock_trakt.return_value.is_authenticated.return_value = True
         response = self.app.get('/api/metadata/tt1234567')
         self.assertEqual(response.status_code, 200)

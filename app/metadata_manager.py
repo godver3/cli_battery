@@ -1,16 +1,14 @@
-from app.database import Session, Item, Metadata, Season, Episode
+from app.database import Session, Item, Metadata, Season, Episode, TMDBToIMDBMapping
 from datetime import datetime, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from app.trakt_metadata import TraktMetadata
-import io
 from PIL import Image
-from typing import Any
-from sqlalchemy.exc import IntegrityError
 import logging
 import requests
 from io import BytesIO
 from app.settings import Settings
+import json
 
 class MetadataManager:
     @staticmethod
@@ -35,31 +33,28 @@ class MetadataManager:
         with Session() as session:
             item = session.query(Item).filter_by(imdb_id=imdb_id).first()
             if not item:
-                # Create a new item if it doesn't exist
                 item = Item(imdb_id=imdb_id, title=metadata_dict.get('title', ''))
                 session.add(item)
-                session.flush()  # This will assign an ID to the new item
+                session.flush()
 
-            # Update the item type
             item_type = metadata_dict.get('type')
             if item_type:
                 item.type = item_type
-            elif 'aired_episodes' in metadata_dict:  # If it has aired_episodes, it's likely a show
+            elif 'aired_episodes' in metadata_dict:
                 item.type = 'show'
             else:
-                item.type = 'movie'  # Default to movie if we can't determine
+                item.type = 'movie'
 
             for key, value in metadata_dict.items():
-                if key != 'type':  # We've already handled 'type' for the Item
+                if key != 'type':
                     metadata = session.query(Metadata).filter_by(item_id=item.id, key=key, provider=provider).first()
                     if metadata:
-                        metadata.value = str(value) if value is not None else None
+                        metadata.value = json.dumps(value)
                         metadata.last_updated = datetime.utcnow()
                     else:
-                        metadata = Metadata(item_id=item.id, key=key, value=str(value) if value is not None else None, provider=provider)
+                        metadata = Metadata(item_id=item.id, key=key, value=json.dumps(value), provider=provider)
                         session.add(metadata)
                 
-                # Update the year in the main item table if the metadata key is 'year'
                 if key == 'year' and value is not None:
                     try:
                         item.year = int(value)
@@ -77,31 +72,43 @@ class MetadataManager:
                 item = session.query(Item).filter_by(imdb_id=imdb_id).first()
                 if item:
                     if metadata_type == 'all':
-                        metadata = {m.key: m.value for m in item.item_metadata}
+                        metadata = {m.key: json.loads(m.value) for m in item.item_metadata}
                     else:
-                        metadata = {m.key: m.value for m in item.item_metadata if m.key == metadata_type}
+                        metadata = {m.key: json.loads(m.value) for m in item.item_metadata if m.key == metadata_type}
                     if metadata:
                         logging.info(f"Metadata for {imdb_id} retrieved from battery")
-                        return {
-                            "source": "battery", 
-                            "metadata": metadata,
-                            "type": item.type
-                        }
+                        return {"metadata": metadata, "source": "battery", "type": item.type}
 
+        # If item not found or force_refresh is True, try to fetch from Trakt
         logging.info(f"Fetching metadata for {imdb_id} from Trakt")
         trakt = TraktMetadata()
         trakt_data = trakt.get_metadata(imdb_id)
+        
         if trakt_data:
             metadata = trakt_data['metadata']
             if metadata_type != 'all':
                 metadata = {k: v for k, v in metadata.items() if k == metadata_type}
             MetadataManager.add_or_update_metadata(imdb_id, metadata, 'Trakt')
             logging.info(f"Metadata for {imdb_id} fetched from Trakt and saved to battery")
-            return {
-                "source": "trakt", 
-                "metadata": metadata, 
-                "type": trakt_data['type']
-            }
+            return {"metadata": metadata, "source": "trakt", "type": trakt_data['type']}
+
+        # If still not found, try to fetch episode metadata
+        logging.info(f"Attempting to fetch episode metadata for {imdb_id}")
+        episode_metadata, source = MetadataManager.get_metadata_by_episode_imdb(imdb_id)
+        
+        if episode_metadata and 'show' in episode_metadata:
+            show_metadata = episode_metadata['show']['metadata']
+            show_imdb_id = show_metadata['ids']['imdb']
+            
+            # Add the show metadata to the database
+            MetadataManager.add_or_update_metadata(show_imdb_id, show_metadata, 'Trakt')
+            
+            # Return the show metadata
+            if metadata_type == 'all':
+                return {"metadata": show_metadata, "source": source, "type": "show"}
+            else:
+                filtered_metadata = {k: v for k, v in show_metadata.items() if k == metadata_type}
+                return {"metadata": filtered_metadata, "source": source, "type": "show"}
 
         logging.warning(f"No metadata found for {imdb_id}")
         return None
@@ -185,19 +192,23 @@ class MetadataManager:
     def get_seasons(imdb_id):
         with Session() as session:
             item = session.query(Item).filter_by(imdb_id=imdb_id).first()
-            print(f"Item query result: {item}")
             if not item:
+                # If the item is not found, it might be an episode IMDB ID
+                # Try to get episode metadata first
+                episode_metadata, source = MetadataManager.get_metadata_by_episode_imdb(imdb_id)
+                if episode_metadata and 'show' in episode_metadata:
+                    show_imdb_id = episode_metadata['show']['metadata']['ids']['imdb']
+                    # Recursively call get_seasons with the show's IMDb ID
+                    return MetadataManager.get_seasons(show_imdb_id)
+                
                 logging.info(f"Item with IMDB ID {imdb_id} not found in battery")
-                return None
+                return None, None
 
             seasons = session.query(Season).filter_by(item_id=item.id).all()
-            print(f"Seasons query result: {seasons}")
             if seasons:
                 seasons_dict = {}
                 for season in seasons:
-                    print(f"Processing season: {season.season_number}")
                     episodes = session.query(Episode).filter_by(season_id=season.id).all()
-                    print(f"Episodes query result for season {season.season_number}: {episodes}")
                     seasons_dict[season.season_number] = {
                         'episode_count': season.episode_count,
                         'episodes': {
@@ -210,23 +221,19 @@ class MetadataManager:
                         }
                     }
                 logging.info(f"Seasons and episodes for {imdb_id} retrieved from battery")
-                print(f"Seasons dict from database: {seasons_dict}")
-                return seasons_dict
+                return seasons_dict, "battery"
 
         logging.info(f"Seasons for {imdb_id} not found in battery, fetching from Trakt")
         trakt = TraktMetadata()
         trakt_seasons = trakt.get_show_seasons(imdb_id)
         trakt_episodes = trakt.get_show_episodes(imdb_id)
-        print(f"Trakt seasons: {trakt_seasons}")  # Add this line
-        print(f"Trakt episodes: {trakt_episodes}")  # Add this line
         if trakt_seasons and trakt_episodes:
             seasons_dict = MetadataManager._process_trakt_seasons(item.id, trakt_seasons, trakt_episodes)
             logging.info(f"Seasons and episodes for {imdb_id} fetched from Trakt and saved to battery")
-            print(f"Seasons dict from Trakt: {seasons_dict}")  # Add this line
-            return seasons_dict
+            return seasons_dict, "trakt"
         
         logging.info(f"No seasons found for {imdb_id} in Trakt")
-        return None
+        return None, None
 
     @staticmethod
     def _process_trakt_seasons(item_id, trakt_seasons, trakt_episodes):
@@ -302,9 +309,9 @@ class MetadataManager:
 
             if MetadataManager.is_metadata_stale(item):
                 new_metadata = MetadataManager.refresh_metadata(imdb_id)
-                return {key: new_metadata.get(key, metadata.value)}
+                return {key: new_metadata.get(key, json.loads(metadata.value))}
 
-            return {key: metadata.value}
+            return {key: json.loads(metadata.value)}
 
     @staticmethod
     def is_metadata_stale(item):
@@ -442,3 +449,182 @@ class MetadataManager:
                 }
                 for episode in episodes
             ]
+
+    @classmethod
+    def get_release_dates(cls, imdb_id):
+        with Session() as session:
+            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
+            if not item:
+                return None
+            
+            release_dates = {}
+            for metadata in item.item_metadata:
+                if metadata.key == 'release_dates':
+                    return json.loads(metadata.value), "battery"
+            
+            # If not in database, fetch from Trakt
+            trakt = TraktMetadata()
+            trakt_release_dates = trakt.get_release_dates(imdb_id)
+            if trakt_release_dates:
+                cls.add_or_update_metadata(imdb_id, {'release_dates': trakt_release_dates}, 'Trakt')
+                return trakt_release_dates, "trakt"
+            
+            return None, None
+
+    @staticmethod
+    def tmdb_to_imdb(tmdb_id):
+        with Session() as session:
+            # Check if the mapping exists in the cache
+            cached_mapping = session.query(TMDBToIMDBMapping).filter_by(tmdb_id=tmdb_id).first()
+            if cached_mapping:
+                return cached_mapping.imdb_id
+
+            # If not in cache, fetch from Trakt
+            trakt = TraktMetadata()
+            imdb_id = trakt.convert_tmdb_to_imdb(tmdb_id)
+            
+            if imdb_id:
+                # Cache the result
+                new_mapping = TMDBToIMDBMapping(tmdb_id=tmdb_id, imdb_id=imdb_id)
+                session.add(new_mapping)
+                session.commit()
+            
+            return imdb_id
+        
+    @staticmethod
+    def get_metadata_by_episode_imdb(episode_imdb_id):
+        with Session() as session:
+            # Check if we already have this episode's metadata
+            episode_metadata = session.query(Metadata).filter_by(key='episode_imdb_id', value=episode_imdb_id).first()
+            if episode_metadata:
+                item = episode_metadata.item
+                show_metadata = {m.key: json.loads(m.value) for m in item.item_metadata}
+                episode_data = json.loads(episode_metadata.value)
+                return {'show': show_metadata, 'episode': episode_data}, "battery"
+
+        # If not in database, fetch from Trakt
+        trakt = TraktMetadata()
+        trakt_data = trakt.get_episode_metadata(episode_imdb_id)
+        if trakt_data:
+            show_imdb_id = trakt_data['show']['imdb_id']
+            show_metadata = trakt_data['show']['metadata']
+            episode_data = trakt_data['episode']
+
+            # Save show metadata
+            MetadataManager.add_or_update_metadata(show_imdb_id, show_metadata, 'Trakt')
+
+            # Save episode metadata
+            with Session() as session:
+                item = session.query(Item).filter_by(imdb_id=show_imdb_id).first()
+                if item:
+                    episode_metadata = Metadata(
+                        item_id=item.id,
+                        key='episode_imdb_id',
+                        value=json.dumps(episode_data),
+                        provider='Trakt'
+                    )
+                    session.add(episode_metadata)
+                    session.commit()
+
+            return {'show': show_metadata, 'episode': episode_data}, "trakt"
+
+        return None, None
+
+    @staticmethod
+    def get_movie_metadata(imdb_id):
+        settings = Settings()
+        trakt = TraktMetadata()
+
+        with Session() as session:
+            item = session.query(Item).filter_by(imdb_id=imdb_id, type='movie').first()
+            if item:
+                # Fetch the metadata for the item from the database
+                metadata = session.query(Metadata).filter_by(item_id=item.id).all()
+                metadata_dict = {}
+                for m in metadata:
+                    try:
+                        metadata_dict[m.key] = json.loads(m.value)
+                    except json.JSONDecodeError:
+                        metadata_dict[m.key] = m.value
+
+                return {
+                    'imdb_id': item.imdb_id,
+                    'title': item.title,
+                    'year': item.year,
+                    'metadata': metadata_dict
+                }, "battery"
+
+            # If the item doesn't exist in our database, fetch it from Trakt
+            movie_data = trakt.get_movie_metadata(imdb_id)
+            if movie_data:
+                # Save the new movie data to our database
+                item = Item(imdb_id=imdb_id, title=movie_data.get('title'), type='movie', year=movie_data.get('year'))
+                session.add(item)
+                session.commit()
+
+                for key, value in movie_data.items():
+                    # Convert lists and dicts to JSON strings before storing
+                    if isinstance(value, (list, dict)):
+                        value = json.dumps(value)
+                    metadata = Metadata(item_id=item.id, key=key, value=str(value), provider='trakt')
+                    session.add(metadata)
+                session.commit()
+
+                return {
+                    'imdb_id': item.imdb_id,
+                    'title': item.title,
+                    'year': item.year,
+                    'metadata': movie_data
+                }, "trakt"
+
+            return None, None
+        
+    @staticmethod
+    def get_show_metadata(imdb_id):
+        settings = Settings()
+        trakt = TraktMetadata()
+
+        with Session() as session:
+            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
+            if item:
+                # Fetch the metadata for the item from the database
+                metadata = session.query(Metadata).filter_by(item_id=item.id).all()
+                metadata_dict = {}
+                for m in metadata:
+                    try:
+                        metadata_dict[m.key] = json.loads(m.value)
+                    except json.JSONDecodeError:
+                        metadata_dict[m.key] = m.value
+
+                return {
+                    'imdb_id': item.imdb_id,
+                    'title': item.title,
+                    'year': item.year,
+                    'metadata': metadata_dict
+                }, "battery"
+
+            # If the item doesn't exist in our database, fetch it from Trakt
+            show_data = trakt.get_show_metadata(imdb_id)
+            if show_data:
+                # Create new item if it doesn't exist
+                item = Item(imdb_id=imdb_id, title=show_data.get('title'), type='show', year=show_data.get('year'))
+                session.add(item)
+                session.commit()
+
+                # Update or add metadata
+                for key, value in show_data.items():
+                    # Convert lists and dicts to JSON strings before storing
+                    if isinstance(value, (list, dict)):
+                        value = json.dumps(value)
+                    metadata = Metadata(item_id=item.id, key=key, value=str(value), provider='trakt')
+                    session.add(metadata)
+                session.commit()
+
+                return {
+                    'imdb_id': item.imdb_id,
+                    'title': item.title,
+                    'year': item.year,
+                    'metadata': show_data
+                }, "trakt"
+
+            return None, None

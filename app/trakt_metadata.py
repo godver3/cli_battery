@@ -16,6 +16,7 @@ from flask import url_for
 from datetime import datetime, timedelta
 import iso8601
 from datetime import timezone
+from collections import defaultdict
 
 TRAKT_API_URL = "https://api.trakt.tv"
 CACHE_FILE = 'db_content/trakt_last_activity.pkl'
@@ -99,10 +100,15 @@ class TraktMetadata:
 
         movie_data = self._get_movie_data(imdb_id)
         if movie_data:
-            return {
+            movie_metadata = {
                 'type': 'movie',
                 'metadata': movie_data
             }
+            # Add release dates to the metadata
+            release_dates = self.get_release_dates(imdb_id)
+            if release_dates:
+                movie_metadata['metadata']['release_dates'] = release_dates
+            return movie_metadata
 
         return None
 
@@ -258,6 +264,90 @@ class TraktMetadata:
 
     def get_poster(self, imdb_id: str) -> str:
         return "Posters not available through Trakt API"
+
+    def get_release_dates(self, imdb_id):
+        url = f"{self.base_url}/movies/{imdb_id}/releases"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
+            releases = response.json()
+            formatted_releases = defaultdict(list)
+            for release in releases:
+                country = release.get('country')
+                release_date = release.get('release_date')
+                release_type = release.get('release_type')
+                if country and release_date:
+                    try:
+                        # Parse the date and convert to ISO format
+                        date = iso8601.parse_date(release_date)
+                        formatted_releases[country].append({
+                            'date': date.date().isoformat(),
+                            'type': release_type
+                        })
+                    except iso8601.ParseError:
+                        logging.warning(f"Could not parse date: {release_date} for {imdb_id} in {country}")
+            return dict(formatted_releases)  # Convert defaultdict to regular dict
+        return None
+
+    def convert_tmdb_to_imdb(self, tmdb_id):
+        url = f"{self.base_url}/search/tmdb/{tmdb_id}?type=movie,show"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
+            data = response.json()
+            if data:
+                item = data[0]
+                if 'movie' in item:
+                    return item['movie']['ids']['imdb']
+                elif 'show' in item:
+                    return item['show']['ids']['imdb']
+        return None
+    
+    def get_show_metadata(self, imdb_id):
+        url = f"{self.base_url}/shows/{imdb_id}?extended=full,episodes"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
+            show_data = response.json()
+            
+            # Fetch seasons data separately to get episode IMDb IDs
+            seasons_url = f"{self.base_url}/shows/{imdb_id}/seasons?extended=episodes,full"
+            seasons_response = self._make_request(seasons_url)
+            if seasons_response and seasons_response.status_code == 200:
+                seasons_data = seasons_response.json()
+                
+                # Add episode IMDb IDs to the show data
+                show_data['seasons'] = []
+                for season in seasons_data:
+                    season_info = {
+                        'number': season['number'],
+                        'episodes': []
+                    }
+                    for episode in season.get('episodes', []):
+                        episode_info = {
+                            'number': episode['number'],
+                            'title': episode['title'],
+                            'imdb_id': episode['ids'].get('imdb')
+                        }
+                        season_info['episodes'].append(episode_info)
+                    show_data['seasons'].append(season_info)
+            
+            return show_data
+        return None
+
+    def get_episode_metadata(self, episode_imdb_id):
+        url = f"{self.base_url}/search/imdb/{episode_imdb_id}?type=episode"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
+            data = response.json()
+            if data:
+                episode_data = data[0]['episode']
+                show_data = data[0]['show']
+                return {
+                    'episode': episode_data,
+                    'show': {
+                        'imdb_id': show_data['ids']['imdb'],
+                        'metadata': show_data
+                    }
+                }
+        return None
 
 # Add this to your MetadataManager class
 def refresh_trakt_metadata(self, imdb_id: str) -> None:

@@ -5,15 +5,6 @@
 {% block content %}
 <h2>Debug - Database Content</h2>
 
-<h3>Add New Item</h3>
-<form id="addItemForm">
-    <input type="text" id="imdbId" placeholder="IMDB ID" required>
-    <input type="text" id="title" placeholder="Title" required>
-    <input type="number" id="year" placeholder="Year" required>
-    <input type="text" id="provider" placeholder="Provider" required>
-    <button type="submit">Add Item</button>
-</form>
-
 <h3>Items</h3>
 <table id="itemTable">
     <thead>
@@ -73,38 +64,6 @@
 </style>
 
 <script>
-document.getElementById('addItemForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const imdbId = document.getElementById('imdbId').value;
-    const title = document.getElementById('title').value;
-    const year = document.getElementById('year').value;
-    const provider = document.getElementById('provider').value;
-
-    fetch('/debug/add_item', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            imdb_id: imdbId,
-            title: title,
-            year: parseInt(year),
-            provider: provider,
-            metadata: {
-                "type": "movie"
-            }
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert('Error adding item');
-        }
-    });
-});
-
 document.querySelectorAll('.deleteItem').forEach(button => {
     button.addEventListener('click', function() {
         const imdbId = this.getAttribute('data-imdb-id');

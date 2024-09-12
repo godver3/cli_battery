@@ -1,7 +1,8 @@
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, LargeBinary, Float, Text
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import relationship, sessionmaker, scoped_session
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+from sqlalchemy.pool import QueuePool
 
 Base = declarative_base()
 
@@ -46,6 +47,7 @@ class Episode(Base):
     id = Column(Integer, primary_key=True)
     season_id = Column(Integer, ForeignKey('seasons.id'), nullable=False)
     episode_number = Column(Integer, nullable=False)
+    episode_imdb_id = Column(String, unique=True, index=True)  # Add this line
     title = Column(String)
     overview = Column(Text)
     runtime = Column(Integer)
@@ -61,6 +63,18 @@ class Poster(Base):
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     item = relationship("Item", back_populates="poster")
 
-# Create the engine and session
-engine = create_engine('sqlite:///metadata.db')
-Session = sessionmaker(bind=engine)
+class TMDBToIMDBMapping(Base):
+    __tablename__ = 'tmdb_to_imdb_mapping'
+
+    id = Column(Integer, primary_key=True)
+    tmdb_id = Column(String, unique=True, nullable=False, index=True)
+    imdb_id = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# Create the engine with connection pooling
+engine = create_engine('sqlite:///metadata.db', poolclass=QueuePool, pool_size=10, max_overflow=20, pool_timeout=30)
+
+# Create a scoped session
+session_factory = sessionmaker(bind=engine)
+Session = scoped_session(session_factory)

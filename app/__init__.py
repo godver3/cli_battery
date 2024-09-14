@@ -1,16 +1,16 @@
 from flask import Flask
-from app.settings import Settings
-import os
-import logging
+from app.database import init_db
 
-app = Flask(__name__)
-settings = Settings()
+def create_app():
+    app = Flask(__name__)
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://cli_debrid:cli_debrid@db:5432/cli_battery_database'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Set a secret key for the application
-app.secret_key = os.environ.get('SECRET_KEY') or '123456789'
+    with app.app_context():
+        init_db(app)
 
-# Configure Flask to use our logger
-app.logger.handlers = logging.getLogger().handlers
-app.logger.setLevel(logging.getLogger().level)
+    # Import and register blueprints
+    from app.routes import main_bp
+    app.register_blueprint(main_bp)
 
-from app import routes
+    return app

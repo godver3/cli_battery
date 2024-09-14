@@ -1,5 +1,4 @@
-from flask import render_template, request, jsonify, send_file, redirect, url_for
-from app import app
+from flask import render_template, request, jsonify, send_file, redirect, url_for, Blueprint
 from app.settings import Settings
 from app.metadata_manager import MetadataManager
 import io
@@ -13,7 +12,9 @@ import json
 
 settings = Settings()
 
-@app.route('/')
+main_bp = Blueprint('main', __name__)
+
+@main_bp.route('/')
 def home():
     db_stats = MetadataManager.get_stats()
     stats = {
@@ -26,7 +27,7 @@ def home():
     }
     return render_template('home.html', stats=stats)
 
-@app.route('/debug')
+@main_bp.route('/debug')
 def debug():
     items = MetadataManager.get_all_items()
     for item in items:
@@ -38,17 +39,17 @@ def debug():
         
     return render_template('debug.html', items=items)
 
-@app.route('/debug/delete_item/<imdb_id>', methods=['POST'])
+@main_bp.route('/debug/delete_item/<imdb_id>', methods=['POST'])
 def delete_item(imdb_id):
     success = MetadataManager.delete_item(imdb_id)
     return jsonify({"success": success})
 
-@app.route('/metadata')
+@main_bp.route('/metadata')
 def metadata():
     all_metadata = MetadataManager.get_all_metadata()
     return render_template('metadata.html', metadata=all_metadata)
 
-@app.route('/api/movie/metadata/<imdb_id>', methods=['GET'])
+@main_bp.route('/api/movie/metadata/<imdb_id>', methods=['GET'])
 def get_movie_metadata(imdb_id):
     try:
         print(f"Fetching movie metadata for IMDB ID: {imdb_id}")
@@ -63,7 +64,7 @@ def get_movie_metadata(imdb_id):
         logging.error(f"Error fetching movie metadata: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/movie/release_dates/<imdb_id>', methods=['GET'])
+@main_bp.route('/api/movie/release_dates/<imdb_id>', methods=['GET'])
 def get_movie_release_dates(imdb_id):
     try:
         print(f"Fetching movie release dates for IMDB ID: {imdb_id}")
@@ -78,7 +79,7 @@ def get_movie_release_dates(imdb_id):
         logging.error(f"Error fetching movie release dates: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/episode/metadata/<imdb_id>', methods=['GET'])
+@main_bp.route('/api/episode/metadata/<imdb_id>', methods=['GET'])
 def get_episode_metadata(imdb_id):
     try:
         print(f"Fetching episode metadata for IMDB ID: {imdb_id}")
@@ -93,14 +94,24 @@ def get_episode_metadata(imdb_id):
         logging.error(f"Error fetching episode metadata: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/show/metadata/<imdb_id>', methods=['GET'])
+@main_bp.route('/api/show/metadata/<imdb_id>', methods=['GET'])
 def get_show_metadata(imdb_id):
     try:
         print(f"Fetching show metadata for IMDB ID: {imdb_id}")
         metadata, source = MetadataManager.get_show_metadata(imdb_id)
         if metadata:
+            # Ensure all values are JSON strings
+            processed_metadata = {}
+            for key, value in metadata.items():
+                if isinstance(value, (dict, list)):
+                    processed_metadata[key] = json.dumps(value)
+                elif not isinstance(value, str):
+                    processed_metadata[key] = json.dumps(value)
+                else:
+                    processed_metadata[key] = value
+
             print(f"Successfully retrieved show metadata for IMDB ID: {imdb_id} from {source}")
-            return jsonify({"data": metadata, "source": source})
+            return jsonify({"data": processed_metadata, "source": source})
         else:
             logging.warning(f"Show metadata not found for IMDB ID: {imdb_id}")
             return jsonify({"error": "Show metadata not found"}), 404
@@ -108,7 +119,7 @@ def get_show_metadata(imdb_id):
         logging.error(f"Error fetching show metadata: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/show/seasons/<imdb_id>', methods=['GET'])
+@main_bp.route('/api/show/seasons/<imdb_id>', methods=['GET'])
 def get_show_seasons(imdb_id):
     try:
         print(f"Fetching seasons for IMDB ID: {imdb_id}")
@@ -123,7 +134,7 @@ def get_show_seasons(imdb_id):
         logging.error(f"Error fetching seasons: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/providers')
+@main_bp.route('/providers')
 def providers():
     settings = Settings()
     providers = settings.providers
@@ -151,7 +162,7 @@ def providers():
                            trakt_authenticated=trakt_authenticated,
                            trakt_enabled=trakt_enabled)
 
-@app.route('/set_active_provider', methods=['POST'])
+@main_bp.route('/set_active_provider', methods=['POST'])
 def set_active_provider():
     data = request.json
     provider = data.get('provider')
@@ -163,7 +174,7 @@ def set_active_provider():
     else:
         return jsonify({'success': False, 'error': 'Invalid provider'}), 400
 
-@app.route('/toggle_provider', methods=['POST'])
+@main_bp.route('/toggle_provider', methods=['POST'])
 def toggle_provider():
     data = request.json
     provider_name = data.get('provider')
@@ -187,7 +198,7 @@ def toggle_provider():
         'providers': providers
     })
 
-@app.route('/update_provider_rank', methods=['POST'])
+@main_bp.route('/update_provider_rank', methods=['POST'])
 def update_provider_rank():
     data = request.json
     provider_name = data.get('provider')
@@ -205,11 +216,11 @@ def update_provider_rank():
         'providers': settings.providers
     })
 
-@app.route('/settings')
+@main_bp.route('/settings')
 def settings_page():
     return render_template('settings.html', settings=settings.get_all())
 
-@app.route('/save_settings', methods=['POST'])
+@main_bp.route('/save_settings', methods=['POST'])
 def save_settings():
     try:
         new_settings = request.form.to_dict()
@@ -235,7 +246,7 @@ def save_settings():
         logging.error(f"Error saving settings: {str(e)}", exc_info=True)
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/authorize_trakt')
+@main_bp.route('/authorize_trakt')
 def authorize_trakt():
     trakt = TraktMetadata()
     if not trakt.client_id:
@@ -243,7 +254,7 @@ def authorize_trakt():
     auth_url = trakt.get_authorization_url()
     return jsonify({"auth_url": auth_url})
 
-@app.route('/trakt_callback')
+@main_bp.route('/trakt_callback')
 def trakt_callback():
     trakt = TraktMetadata()
     auth_code = request.args.get('code')
@@ -257,12 +268,12 @@ def trakt_callback():
         flash("No authorization code received from Trakt.", "error")
     return redirect(url_for('settings_page'))  # Change 'settings' to 'settings_page'
 
-@app.route('/check_trakt_auth')
+@main_bp.route('/check_trakt_auth')
 def check_trakt_auth():
     trakt = TraktMetadata()
     return jsonify({"is_authenticated": trakt.is_authenticated()})
 
-@app.route('/debug/schema')
+@main_bp.route('/debug/schema')
 def debug_schema():
     with Session() as session:
         inspector = inspect(session.bind)
@@ -273,7 +284,7 @@ def debug_schema():
             schema[table] = [{"name": column['name'], "type": str(column['type'])} for column in columns]
         return jsonify(schema)
 
-@app.route('/debug/item/<imdb_id>')
+@main_bp.route('/debug/item/<imdb_id>')
 def debug_item(imdb_id):
     settings = Settings()
     if not any(provider['enabled'] for provider in settings.providers):
@@ -299,7 +310,7 @@ def debug_item(imdb_id):
             "seasons": seasons
         })
 
-@app.route('/api/tmdb_to_imdb/<tmdb_id>', methods=['GET'])
+@main_bp.route('/api/tmdb_to_imdb/<tmdb_id>', methods=['GET'])
 def tmdb_to_imdb(tmdb_id):
     try:
         print(f"Converting TMDB ID to IMDB ID: {tmdb_id}")
@@ -315,7 +326,7 @@ def tmdb_to_imdb(tmdb_id):
         logging.error(f"Error in tmdb_to_imdb conversion: {str(e)}", exc_info=True)
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-@app.context_processor
+@main_bp.context_processor
 def inject_stats():
     stats = MetadataManager.get_stats()
     return dict(stats=stats)

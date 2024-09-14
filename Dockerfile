@@ -13,6 +13,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the current directory contents into the container at /app
 COPY . /app
 
+# Create necessary directories and files
+RUN mkdir -p logs && \
+    touch config.json
+
 # Ensure Python output is sent straight to terminal without buffering
 ENV PYTHONUNBUFFERED=1
 

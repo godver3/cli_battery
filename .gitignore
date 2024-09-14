@@ -164,3 +164,6 @@ cython_debug/
 *.json
 *.db
 config.json
+compare*
+commit.sh
+logs

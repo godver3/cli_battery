@@ -15,7 +15,6 @@ class Settings:
         self.update_frequency = 60  # in minutes
         self.max_entries = 1000  # default value, adjust as needed
         self.log_level = 'INFO'
-        self.database_path = 'db_content/cli_battery.db'
         self.Trakt = {
             'client_id': '',
             'client_secret': '',
@@ -52,7 +51,6 @@ class Settings:
             self.update_frequency = config.get('update_frequency', 60)
             self.max_entries = config.get('max_entries', 1000)
             self.log_level = config.get('log_level', 'INFO')
-            self.database_path = config.get('database_path', 'db_content/cli_battery.db')
             self.Trakt = config.get('Trakt', self.Trakt)
 
     def get_all(self):

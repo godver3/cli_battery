@@ -7,7 +7,7 @@ from sqlalchemy import or_, func, cast, String
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.exc import IntegrityError
 from app.logger_config import logger
-from sqlalchemy import text
+from sqlalchemy import text, UniqueConstraint
 
 
 # Remove the engine creation for now
@@ -41,6 +41,7 @@ class Metadata(Base):
 
 class Season(Base):
     __tablename__ = 'seasons'
+    __table_args__ = (UniqueConstraint('item_id', 'season_number', name='uix_item_season'),)
 
     id = Column(Integer, primary_key=True)
     item_id = Column(Integer, ForeignKey('items.id'), nullable=False)
@@ -61,6 +62,10 @@ class Episode(Base):
     runtime = Column(Integer)
     first_aired = Column(DateTime)
     season = relationship("Season", back_populates="episodes")
+    imdb_id = Column(String)  # Add this line to include the imdb_id column
+
+    # Relationships
+    season = relationship('Season', back_populates='episodes')
 
 class Poster(Base):
     __tablename__ = 'posters'

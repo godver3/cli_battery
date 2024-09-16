@@ -15,9 +15,11 @@ from trakt.tv import TVShow
 from flask import url_for
 from datetime import datetime, timedelta
 import iso8601
-from datetime import timezone
+from datetime import timezone, datetime
 from collections import defaultdict
 from app.trakt_auth import TraktAuth
+import traceback
+import iso8601
 
 TRAKT_API_URL = "https://api.trakt.tv"
 CACHE_FILE = 'db_content/trakt_last_activity.pkl'
@@ -36,10 +38,17 @@ class TraktMetadata:
         self.expires_at = self.settings.Trakt.get('expires_at')
 
     def _make_request(self, url):
+        logger.info(f"_make_request called from: {traceback.extract_stack()[-2][2]}")
+
         if not trakt_auth.is_authenticated():
             if not trakt_auth.refresh_access_token():
                 logger.error("Failed to authenticate with Trakt.")
                 return None
+            else:
+                # Update instance variables with new tokens
+                self.access_token = self.settings.Trakt.get('access_token')
+                self.refresh_token = self.settings.Trakt.get('refresh_token')
+                self.expires_at = self.settings.Trakt.get('expires_at')
 
         headers = {
             'Content-Type': 'application/json',
@@ -59,6 +68,7 @@ class TraktMetadata:
                 logger.error(f"Response status code: {e.response.status_code}")
                 logger.error(f"Response text: {e.response.text}")
             return None
+
 
     def fetch_items_from_trakt(self, endpoint: str) -> List[Dict[str, Any]]:
         if not self.headers:
@@ -113,23 +123,74 @@ class TraktMetadata:
             return response.json()
         return None
 
-    def get_show_seasons(self, imdb_id):
-        url = f"{self.base_url}/shows/{imdb_id}/seasons?extended=full"
+    def get_show_seasons_and_episodes(self, imdb_id):
+        url = f"{self.base_url}/shows/{imdb_id}/seasons?extended=full,episodes"
         response = self._make_request(url)
         if response and response.status_code == 200:
             seasons_data = response.json()
-            processed_seasons = []
+            processed_seasons = {}
             for season in seasons_data:
                 if season['number'] is not None and season['number'] > 0:
-                    processed_seasons.append({
-                        'season': season['number'],
+                    season_number = season['number']
+                    processed_seasons[season_number] = {
                         'episode_count': season.get('episode_count', 0),
-                        'aired_episodes': season.get('aired_episodes', 0),
-                        'title': season.get('title', f"Season {season['number']}"),
-                        'overview': season.get('overview', ''),
-                    })
-            return processed_seasons
+                        'episodes': {}
+                    }
+                    for episode in season.get('episodes', []):
+                        episode_number = episode['number']
+                        processed_seasons[season_number]['episodes'][episode_number] = {
+                            'title': episode.get('title', ''),
+                            'overview': episode.get('overview', ''),
+                            'runtime': episode.get('runtime', 0),
+                            'first_aired': episode.get('first_aired'),
+                            'imdb_id': episode['ids'].get('imdb')
+                        }
+            return processed_seasons, 'trakt'
+        return None, None
+
+    def get_show_metadata(self, imdb_id):
+        url = f"{self.base_url}/shows/{imdb_id}?extended=full"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
+            show_data = response.json()
+            seasons_data, _ = self.get_show_seasons_and_episodes(imdb_id)
+            show_data['seasons'] = seasons_data
+            return show_data
         return None
+
+    def get_episode_metadata(self, episode_imdb_id):
+        # First, check if we have the episode metadata cached
+        if hasattr(self, 'cached_episodes') and episode_imdb_id in self.cached_episodes:
+            return self.cached_episodes[episode_imdb_id]
+
+        # If not cached, fetch the show data
+        url = f"{self.base_url}/search/imdb/{episode_imdb_id}?type=episode"
+        response = self._make_request(url)
+        if response and response.status_code == 200:
+            data = response.json()
+            if data:
+                episode_data = data[0]['episode']
+                show_data = data[0]['show']
+                show_imdb_id = show_data['ids']['imdb']
+
+                # Fetch all episodes for this show
+                _, all_episodes = self.get_show_seasons_and_episodes(show_imdb_id)
+                
+                # Cache all episodes
+                self.cached_episodes = all_episodes
+
+                # Return the requested episode
+                if episode_imdb_id in self.cached_episodes:
+                    return {
+                        'episode': self.cached_episodes[episode_imdb_id],
+                        'show': {
+                            'imdb_id': show_imdb_id,
+                            'metadata': show_data
+                        }
+                    }
+
+        return None
+
 
     def get_show_episodes(self, imdb_id):
         url = f"{self.base_url}/shows/{imdb_id}/seasons?extended=full,episodes"
@@ -143,10 +204,12 @@ class TraktMetadata:
                         first_aired = None
                         if episode.get('first_aired'):
                             try:
-                                first_aired = datetime.strptime(episode['first_aired'], "%Y-%m-%dT%H:%M:%S.%fZ")
-                            except ValueError:
-                                # If the format is different, try without milliseconds
-                                first_aired = datetime.strptime(episode['first_aired'], "%Y-%m-%dT%H:%M:%SZ")
+                                first_aired = iso8601.parse_date(episode['first_aired'])
+                            except iso8601.ParseError:
+                                logger.warning(
+                                    f"Could not parse date: {episode['first_aired']} for episode {episode['number']} "
+                                    f"of season {season['number']} in {imdb_id}"
+                                )
 
                         processed_episodes.append({
                             'season': season['number'],
@@ -154,10 +217,12 @@ class TraktMetadata:
                             'title': episode.get('title', ''),
                             'overview': episode.get('overview', ''),
                             'runtime': episode.get('runtime', 0),
-                            'first_aired': first_aired,  # Now a datetime object
+                            'first_aired': first_aired,
+                            'imdb_id': episode['ids'].get('imdb')  # Include the IMDb ID
                         })
             return processed_episodes
         return None
+
 
     def refresh_metadata(self, imdb_id: str) -> Dict[str, Any]:
         return self.get_metadata(imdb_id)
@@ -192,15 +257,17 @@ class TraktMetadata:
                 release_type = release.get('release_type')
                 if country and release_date:
                     try:
-                        # Parse the date and convert to ISO format
                         date = iso8601.parse_date(release_date)
+                        # Convert to UTC if necessary
+                        if date.tzinfo is not None:
+                            date = date.astimezone(timezone.utc)
                         formatted_releases[country].append({
                             'date': date.date().isoformat(),
                             'type': release_type
                         })
                     except iso8601.ParseError:
                         logger.warning(f"Could not parse date: {release_date} for {imdb_id} in {country}")
-            return dict(formatted_releases)  # Convert defaultdict to regular dict
+            return dict(formatted_releases)
         return None
 
     def convert_tmdb_to_imdb(self, tmdb_id):
@@ -216,56 +283,6 @@ class TraktMetadata:
                     return item['show']['ids']['imdb'], 'trakt'
         return None, None
     
-    def get_show_metadata(self, imdb_id):
-        url = f"{self.base_url}/shows/{imdb_id}?extended=full,episodes"
-        response = self._make_request(url)
-        if response and response.status_code == 200:
-            show_data = response.json()
-            
-            # Fetch seasons data separately to get episode IMDb IDs
-            seasons_url = f"{self.base_url}/shows/{imdb_id}/seasons?extended=episodes,full"
-            seasons_response = self._make_request(seasons_url)
-            if seasons_response and seasons_response.status_code == 200:
-                seasons_data = seasons_response.json()
-                
-                # Add episode IMDb IDs to the show data
-                show_data['seasons'] = []
-                for season in seasons_data:
-                    if season['number'] is not None and season['number'] > 0:
-                        season_info = {
-                            'number': season['number'],
-                            'episodes': []
-                        }
-                        for episode in season.get('episodes', []):
-                            episode_info = {
-                                'number': episode['number'],
-                                'title': episode['title'],
-                                'imdb_id': episode['ids'].get('imdb'),
-                                'runtime': episode.get('runtime', 0)
-                            }
-                            season_info['episodes'].append(episode_info)
-                        show_data['seasons'].append(season_info)
-            
-            return show_data
-        return None
-
-    def get_episode_metadata(self, episode_imdb_id):
-        url = f"{self.base_url}/search/imdb/{episode_imdb_id}?type=episode"
-        response = self._make_request(url)
-        if response and response.status_code == 200:
-            data = response.json()
-            if data:
-                episode_data = data[0]['episode']
-                show_data = data[0]['show']
-                return {
-                    'episode': episode_data,
-                    'show': {
-                        'imdb_id': show_data['ids']['imdb'],
-                        'metadata': show_data
-                    }
-                }
-        return None
-
 # Add this to your MetadataManager class
 def refresh_trakt_metadata(self, imdb_id: str) -> None:
     trakt = TraktMetadata()

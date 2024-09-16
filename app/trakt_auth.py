@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 import json
 from app.settings import Settings
 import os
-
+import traceback
 TRAKT_API_URL = "https://api.trakt.tv"
 REQUEST_TIMEOUT = 10  # seconds
 
@@ -67,6 +67,8 @@ class TraktAuth:
         logger.info("Trakt token data saved and reloaded.")
 
     def is_authenticated(self):
+        logger.info(f"is_authenticated called from: {traceback.extract_stack()[-2][2]}")
+
         if not self.access_token or not self.expires_at:
             logger.warning(f"Missing authentication data: access_token={bool(self.access_token)}, expires_at={self.expires_at}")
             return False

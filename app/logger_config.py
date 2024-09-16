@@ -14,7 +14,7 @@ def setup_logger():
     logger.handlers.clear()
 
     # Create formatter
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(filename)s:%(funcName)s - %(levelname)s - %(message)s')
 
     # Add console handler
     console_handler = logging.StreamHandler()

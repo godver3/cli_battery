@@ -40,73 +40,6 @@ class MetadataManager:
                 logger.info(f"No items found for IMDb ID: {imdb_id}")
 
     @staticmethod
-    def get_metadata(imdb_id, metadata_type='all', force_refresh=False):
-        settings = Settings()
-        staleness_threshold = settings.staleness_threshold_timedelta
-
-        logger.info(f"get_metadata called for IMDB ID: {imdb_id}, type: {metadata_type}, force_refresh: {force_refresh}")
-
-        if not force_refresh:
-            with Session() as session:
-                item = session.query(Item).options(selectinload(Item.item_metadata)).filter_by(imdb_id=imdb_id).first()
-                if item:
-                    logger.info(f"Item found in database for IMDB ID: {imdb_id}")
-                    if metadata_type == 'all':
-                        metadata = {m.key: m.value for m in item.item_metadata}
-                    else:
-                        metadata = {m.key: m.value for m in item.item_metadata if m.key == metadata_type}
-                    
-                    if metadata:
-                        last_updated = max(m.last_updated for m in item.item_metadata)
-                        time_until_stale = last_updated + staleness_threshold - datetime.utcnow()
-                        
-                        logger.info(f"Metadata found for {imdb_id}. Last updated: {last_updated}, Time until stale: {time_until_stale}")
-                        
-                        if time_until_stale > timedelta():
-                            logger.info(f"Metadata for {imdb_id} retrieved from battery. Time until stale: {time_until_stale}")
-                            return {"metadata": metadata, "source": "battery", "type": item.type}
-                        else:
-                            logger.info(f"Metadata for {imdb_id} is stale. Refreshing from Trakt.")
-                    else:
-                        logger.info(f"No metadata found for {imdb_id} in database")
-                else:
-                    logger.info(f"No item found in database for IMDB ID: {imdb_id}")
-
-        # If item not found, force_refresh is True, or metadata is stale, fetch from Trakt
-        logger.info(f"Fetching metadata for {imdb_id} from Trakt")
-        trakt = TraktMetadata()
-        trakt_data = trakt.get_metadata(imdb_id)
-        
-        if trakt_data:
-            metadata = trakt_data['metadata']
-            if metadata_type != 'all':
-                metadata = {k: v for k, v in metadata.items() if k == metadata_type}
-            MetadataManager.add_or_update_metadata(imdb_id, metadata, 'Trakt')
-            logger.debug(f"Metadata for {imdb_id} fetched from Trakt and saved to battery")
-            return {"metadata": metadata, "source": "trakt", "type": trakt_data['type']}
-
-        # If still not found, try to fetch episode metadata
-        logger.info(f"Attempting to fetch episode metadata for {imdb_id}")
-        episode_metadata, source = MetadataManager.get_metadata_by_episode_imdb(imdb_id)
-        
-        if episode_metadata and 'show' in episode_metadata:
-            show_metadata = episode_metadata['show']['metadata']
-            show_imdb_id = show_metadata['ids']['imdb']
-            
-            # Add the show metadata to the database
-            MetadataManager.add_or_update_metadata(show_imdb_id, show_metadata, 'Trakt')
-            
-            # Return the show metadata
-            if metadata_type == 'all':
-                return {"metadata": show_metadata, "source": source, "type": "show"}
-            else:
-                filtered_metadata = {k: v for k, v in show_metadata.items() if k == metadata_type}
-                return {"metadata": filtered_metadata, "source": source, "type": "show"}
-
-        logger.warning(f"No metadata found for {imdb_id}")
-        return None
-
-    @staticmethod
     def get_item(imdb_id):
         return DatabaseManager.get_item(imdb_id)
 
@@ -568,6 +501,8 @@ class MetadataManager:
         settings = Settings()
         trakt = TraktMetadata()
 
+        logger.info(f"Requesting movie metadata for IMDB ID: {imdb_id}")
+
         with Session() as session:
             item = session.query(Item).filter_by(imdb_id=imdb_id, type='movie').first()
             if item:
@@ -585,6 +520,7 @@ class MetadataManager:
                     else:
                         metadata_dict[m.key] = m.value
 
+                logger.info(f"Retrieved movie metadata for IMDB ID: {imdb_id} from Battery")
                 return metadata_dict, "battery"
 
             # If the item doesn't exist in our database, fetch it from Trakt
@@ -601,8 +537,10 @@ class MetadataManager:
                     session.add(metadata)
                 session.commit()
 
+                logger.info(f"Retrieved and stored movie metadata for IMDB ID: {imdb_id} from Trakt")
                 return movie_data, "trakt"
 
+            logger.warning(f"No movie metadata found for IMDB ID: {imdb_id}")
             return None, None
 
     @staticmethod

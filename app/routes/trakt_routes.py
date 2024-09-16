@@ -1,4 +1,4 @@
-from flask import render_template, request, jsonify, send_file, redirect, url_for, Blueprint
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, Blueprint
 from app.settings import Settings
 from app.metadata_manager import MetadataManager
 import io
@@ -99,3 +99,32 @@ def update_trakt_config(key, value):
     config = get_trakt_config()
     config[key] = value
     save_trakt_config(config)
+
+
+@trakt_bp.route('/receive_trakt_auth', methods=['POST'])
+def receive_trakt_auth():
+    try:
+        auth_data = request.json
+        trakt_auth = TraktAuth()
+        
+        # Update TraktAuth instance with new data
+        trakt_auth.client_id = auth_data.get('CLIENT_ID')
+        trakt_auth.client_secret = auth_data.get('CLIENT_SECRET')
+        trakt_auth.access_token = auth_data.get('OAUTH_TOKEN')
+        trakt_auth.refresh_token = auth_data.get('OAUTH_REFRESH')
+        trakt_auth.expires_at = auth_data.get('OAUTH_EXPIRES_AT')
+        
+        # Save the new data
+        trakt_auth.save_trakt_credentials()
+        
+        # Update settings
+        trakt_auth.settings.Trakt['client_id'] = trakt_auth.client_id
+        trakt_auth.settings.Trakt['client_secret'] = trakt_auth.client_secret
+        trakt_auth.settings.Trakt['access_token'] = trakt_auth.access_token
+        trakt_auth.settings.Trakt['refresh_token'] = trakt_auth.refresh_token
+        trakt_auth.settings.Trakt['expires_at'] = trakt_auth.expires_at
+        trakt_auth.settings.save_settings()
+        
+        return jsonify({'status': 'success', 'message': 'Trakt auth received and saved successfully'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500

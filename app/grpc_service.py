@@ -3,14 +3,12 @@ from concurrent import futures
 import metadata_service_pb2
 import metadata_service_pb2_grpc
 from app.direct_api import DirectAPI
-import logging
+from app.logger_config import logger
 import json
 
 class MetadataServicer(metadata_service_pb2_grpc.MetadataServiceServicer):
     def GetMovieMetadata(self, request, context):
-        logging.info(f"Received request for movie metadata: {request.imdb_id}")
         metadata, source = DirectAPI.get_movie_metadata(request.imdb_id)
-        logging.info(f"Retrieved metadata: {metadata}, source: {source}")
         
         # Convert all values in metadata to strings
         string_metadata = {}
@@ -38,10 +36,8 @@ class MetadataServicer(metadata_service_pb2_grpc.MetadataServiceServicer):
         )
 
     def GetEpisodeMetadata(self, request, context):
-        logging.info(f"Received request for episode metadata: {request.imdb_id}")
         try:
             metadata, source = DirectAPI.get_episode_metadata(request.imdb_id)
-            logging.info(f"Retrieved metadata: {metadata}, source: {source}")
             
             if metadata is None:
                 return metadata_service_pb2.MetadataResponse(
@@ -62,7 +58,7 @@ class MetadataServicer(metadata_service_pb2_grpc.MetadataServiceServicer):
                 source=source
             )
         except Exception as e:
-            logging.exception("Error in GetEpisodeMetadata")
+            logger.exception("Error in GetEpisodeMetadata")
             context.abort(grpc.StatusCode.INTERNAL, f"Internal error: {str(e)}")
 
     def GetShowMetadata(self, request, context):

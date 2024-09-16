@@ -1,4 +1,4 @@
-import logging
+from app.logger_config import logger
 from datetime import datetime, timedelta
 import iso8601
 from datetime import timezone
@@ -22,7 +22,7 @@ class TraktAuth:
         self.load_auth()
         
         # Add debug logging
-        logging.debug(f"TraktAuth initialized: access_token={bool(self.access_token)}, refresh_token={bool(self.refresh_token)}, expires_at={self.expires_at}")
+        logger.debug(f"TraktAuth initialized: access_token={bool(self.access_token)}, refresh_token={bool(self.refresh_token)}, expires_at={self.expires_at}")
 
     def load_auth(self):
         self.access_token = self.settings.Trakt.get('access_token')
@@ -33,10 +33,10 @@ class TraktAuth:
         if not self.access_token or not self.refresh_token:
             self.load_from_pytrakt()
 
-        logging.info("Trakt authentication loaded.")
+        logger.info("Trakt authentication loaded.")
         
         # Add debug logging
-        logging.debug(f"Loaded auth: access_token={bool(self.access_token)}, refresh_token={bool(self.refresh_token)}, expires_at={self.expires_at}")
+        logger.debug(f"Loaded auth: access_token={bool(self.access_token)}, refresh_token={bool(self.refresh_token)}, expires_at={self.expires_at}")
 
     def load_from_pytrakt(self):
         if os.path.exists(self.pytrakt_file):
@@ -52,10 +52,10 @@ class TraktAuth:
             self.settings.Trakt['expires_at'] = self.expires_at
             self.settings.save_settings()
             
-            logging.info("Loaded authentication data from .pytrakt.json")
-            logging.debug(f"Loaded auth: access_token={bool(self.access_token)}, refresh_token={bool(self.refresh_token)}, expires_at={self.expires_at}")
+            logger.info("Loaded authentication data from .pytrakt.json")
+            logger.debug(f"Loaded auth: access_token={bool(self.access_token)}, refresh_token={bool(self.refresh_token)}, expires_at={self.expires_at}")
         else:
-            logging.warning(f".pytrakt.json file not found at {self.pytrakt_file}")
+            logger.warning(f".pytrakt.json file not found at {self.pytrakt_file}")
 
     def save_token_data(self, token_data):
         self.settings.Trakt['access_token'] = token_data['access_token']
@@ -64,11 +64,11 @@ class TraktAuth:
         self.settings.save_settings()
         self.load_auth()  # Reload the auth data after saving
         self.save_trakt_credentials()  # Also update the .pytrakt.json file
-        logging.info("Trakt token data saved and reloaded.")
+        logger.info("Trakt token data saved and reloaded.")
 
     def is_authenticated(self):
         if not self.access_token or not self.expires_at:
-            logging.warning(f"Missing authentication data: access_token={bool(self.access_token)}, expires_at={self.expires_at}")
+            logger.warning(f"Missing authentication data: access_token={bool(self.access_token)}, expires_at={self.expires_at}")
             return False
         
         if isinstance(self.expires_at, str):
@@ -76,17 +76,17 @@ class TraktAuth:
         elif isinstance(self.expires_at, (int, float)):
             expires_at = datetime.fromtimestamp(self.expires_at, tz=timezone.utc)
         else:
-            logging.error(f"Unexpected type for expires_at: {type(self.expires_at)}")
+            logger.error(f"Unexpected type for expires_at: {type(self.expires_at)}")
             return False
         
         now = datetime.now(timezone.utc)
         is_valid = now < expires_at
-        logging.info(f"Authentication status: {is_valid}. Current time: {now}, Expires at: {expires_at}")
+        logger.info(f"Authentication status: {is_valid}. Current time: {now}, Expires at: {expires_at}")
         return is_valid
 
     def refresh_access_token(self):
         if not self.refresh_token:
-            logging.error("No refresh token available.")
+            logger.error("No refresh token available.")
             return False
 
         data = {
@@ -101,7 +101,7 @@ class TraktAuth:
             self.save_token_data(token_data)
             return True
         else:
-            logging.error(f"Failed to refresh access token: {response.text}")
+            logger.error(f"Failed to refresh access token: {response.text}")
             return False
 
     def get_device_code(self):
@@ -129,7 +129,7 @@ class TraktAuth:
             "redirect_uri": self.redirect_uri,
         }
         auth_url = f"{self.base_url}/oauth/authorize?{urlencode(params)}"
-        logging.info(f"Generated Trakt authorization URL: {auth_url}")
+        logger.info(f"Generated Trakt authorization URL: {auth_url}")
         return auth_url
 
     def exchange_code_for_token(self, code):
@@ -146,7 +146,7 @@ class TraktAuth:
             self.save_token_data(token_data)
             return True
         else:
-            logging.error(f"Failed to exchange code for token: {response.text}")
+            logger.error(f"Failed to exchange code for token: {response.text}")
             return False
 
     def save_trakt_credentials(self):
@@ -159,4 +159,4 @@ class TraktAuth:
         }
         with open(self.pytrakt_file, 'w') as f:
             json.dump(credentials, f)
-        logging.info(f"Trakt credentials saved to {self.pytrakt_file}")
+        logger.info(f"Trakt credentials saved to {self.pytrakt_file}")

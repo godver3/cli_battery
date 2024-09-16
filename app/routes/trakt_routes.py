@@ -2,8 +2,8 @@ from flask import render_template, request, jsonify, send_file, redirect, url_fo
 from app.settings import Settings
 from app.metadata_manager import MetadataManager
 import io
-import logging
 from app.trakt_auth import TraktAuth
+from app.logger_config import logger
 from flask import flash
 from sqlalchemy import inspect
 from app.database import Session, Item, Metadata, Season, Poster  # Add this line
@@ -33,7 +33,7 @@ def trakt_auth():
             'device_code': device_code_response['device_code']
         })
     except Exception as e:
-        logging.error(f"Error in trakt_auth: {str(e)}")
+        logger.error(f"Error in trakt_auth: {str(e)}")
         return jsonify({'error': f'Unable to start authorization process: {str(e)}'}), 500
 
 @trakt_bp.route('/trakt_auth_status', methods=['POST'])

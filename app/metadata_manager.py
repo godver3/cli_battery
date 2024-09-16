@@ -4,7 +4,7 @@ from sqlalchemy import func, cast, String, or_
 from sqlalchemy.orm import joinedload
 from app.trakt_metadata import TraktMetadata
 from PIL import Image
-import logging
+from app.logger_config import logger
 import requests
 from io import BytesIO
 from app.settings import Settings
@@ -34,27 +34,46 @@ class MetadataManager:
             ).all()
             
             for item in items:
-                logging.info(f"Found item: ID={item.id}, IMDb ID={item.imdb_id}, Title={item.title}, Type={item.type}")
+                logger.info(f"Found item: ID={item.id}, IMDb ID={item.imdb_id}, Title={item.title}, Type={item.type}")
             
             if not items:
-                logging.info(f"No items found for IMDb ID: {imdb_id}")
+                logger.info(f"No items found for IMDb ID: {imdb_id}")
 
     @staticmethod
     def get_metadata(imdb_id, metadata_type='all', force_refresh=False):
+        settings = Settings()
+        staleness_threshold = settings.staleness_threshold_timedelta
+
+        logger.info(f"get_metadata called for IMDB ID: {imdb_id}, type: {metadata_type}, force_refresh: {force_refresh}")
+
         if not force_refresh:
             with Session() as session:
                 item = session.query(Item).options(selectinload(Item.item_metadata)).filter_by(imdb_id=imdb_id).first()
                 if item:
+                    logger.info(f"Item found in database for IMDB ID: {imdb_id}")
                     if metadata_type == 'all':
                         metadata = {m.key: m.value for m in item.item_metadata}
                     else:
                         metadata = {m.key: m.value for m in item.item_metadata if m.key == metadata_type}
+                    
                     if metadata:
-                        logging.info(f"Metadata for {imdb_id} retrieved from battery")
-                        return {"metadata": metadata, "source": "battery", "type": item.type}
+                        last_updated = max(m.last_updated for m in item.item_metadata)
+                        time_until_stale = last_updated + staleness_threshold - datetime.utcnow()
+                        
+                        logger.info(f"Metadata found for {imdb_id}. Last updated: {last_updated}, Time until stale: {time_until_stale}")
+                        
+                        if time_until_stale > timedelta():
+                            logger.info(f"Metadata for {imdb_id} retrieved from battery. Time until stale: {time_until_stale}")
+                            return {"metadata": metadata, "source": "battery", "type": item.type}
+                        else:
+                            logger.info(f"Metadata for {imdb_id} is stale. Refreshing from Trakt.")
+                    else:
+                        logger.info(f"No metadata found for {imdb_id} in database")
+                else:
+                    logger.info(f"No item found in database for IMDB ID: {imdb_id}")
 
-        # If item not found or force_refresh is True, try to fetch from Trakt
-        logging.info(f"Fetching metadata for {imdb_id} from Trakt")
+        # If item not found, force_refresh is True, or metadata is stale, fetch from Trakt
+        logger.info(f"Fetching metadata for {imdb_id} from Trakt")
         trakt = TraktMetadata()
         trakt_data = trakt.get_metadata(imdb_id)
         
@@ -63,11 +82,11 @@ class MetadataManager:
             if metadata_type != 'all':
                 metadata = {k: v for k, v in metadata.items() if k == metadata_type}
             MetadataManager.add_or_update_metadata(imdb_id, metadata, 'Trakt')
-            logging.info(f"Metadata for {imdb_id} fetched from Trakt and saved to battery")
+            logger.debug(f"Metadata for {imdb_id} fetched from Trakt and saved to battery")
             return {"metadata": metadata, "source": "trakt", "type": trakt_data['type']}
 
         # If still not found, try to fetch episode metadata
-        logging.info(f"Attempting to fetch episode metadata for {imdb_id}")
+        logger.info(f"Attempting to fetch episode metadata for {imdb_id}")
         episode_metadata, source = MetadataManager.get_metadata_by_episode_imdb(imdb_id)
         
         if episode_metadata and 'show' in episode_metadata:
@@ -84,7 +103,7 @@ class MetadataManager:
                 filtered_metadata = {k: v for k, v in show_metadata.items() if k == metadata_type}
                 return {"metadata": filtered_metadata, "source": source, "type": "show"}
 
-        logging.warning(f"No metadata found for {imdb_id}")
+        logger.warning(f"No metadata found for {imdb_id}")
         return None
 
     @staticmethod
@@ -144,11 +163,11 @@ class MetadataManager:
         
     @staticmethod
     def get_seasons(imdb_id):
-        logging.info(f"Getting seasons for IMDB ID: {imdb_id}")
+        logger.info(f"Getting seasons for IMDB ID: {imdb_id}")
         with Session() as session:
             item = session.query(Item).filter_by(imdb_id=imdb_id, type='show').first()
             if not item:
-                logging.info(f"Item not found in database for IMDB ID: {imdb_id}. Fetching metadata from Trakt.")
+                logger.info(f"Item not found in database for IMDB ID: {imdb_id}. Fetching metadata from Trakt.")
                 trakt = TraktMetadata()
                 show_metadata = trakt.get_show_metadata(imdb_id)
                 if show_metadata:
@@ -161,11 +180,11 @@ class MetadataManager:
                     session.add(item)
                     session.commit()
                 else:
-                    logging.error(f"Failed to fetch metadata for IMDB ID: {imdb_id}")
+                    logger.error(f"Failed to fetch metadata for IMDB ID: {imdb_id}")
                     return None, None
 
             if item.seasons:
-                logging.info(f"Found seasons in database for IMDB ID: {imdb_id}")
+                logger.info(f"Found seasons in database for IMDB ID: {imdb_id}")
                 seasons_data = {}
                 for season in item.seasons:
                     episodes = MetadataManager.get_episodes(imdb_id, season.season_number)
@@ -174,12 +193,12 @@ class MetadataManager:
                         'episodes': episodes
                     }
                 if seasons_data:
-                    logging.info(f"Retrieved seasons data from database for IMDB ID: {imdb_id}")
+                    logger.info(f"Retrieved seasons data from database for IMDB ID: {imdb_id}")
                     return seasons_data, "battery"
                 else:
-                    logging.info(f"No seasons data found in database for IMDB ID: {imdb_id}")
+                    logger.info(f"No seasons data found in database for IMDB ID: {imdb_id}")
 
-            logging.info(f"Fetching seasons data from Trakt for IMDB ID: {imdb_id}")
+            logger.info(f"Fetching seasons data from Trakt for IMDB ID: {imdb_id}")
             trakt = TraktMetadata()
             seasons_data = trakt.get_show_seasons(imdb_id)
             episodes_data = trakt.get_show_episodes(imdb_id)
@@ -187,10 +206,10 @@ class MetadataManager:
                 processed_data = MetadataManager._process_trakt_seasons(imdb_id, seasons_data, episodes_data)
                 MetadataManager.add_or_update_seasons(imdb_id, seasons_data, 'Trakt')
                 MetadataManager.add_or_update_episodes(imdb_id, episodes_data, 'Trakt')
-                logging.info(f"Stored seasons and episodes data in database for IMDB ID: {imdb_id}")
+                logger.info(f"Stored seasons and episodes data in database for IMDB ID: {imdb_id}")
                 return processed_data, "trakt"
 
-            logging.warning(f"No seasons data found for IMDB ID: {imdb_id}")
+            logger.warning(f"No seasons data found for IMDB ID: {imdb_id}")
             return None, None
 
     @staticmethod
@@ -237,7 +256,7 @@ class MetadataManager:
         with Session() as session:
             item = session.query(Item).filter_by(imdb_id=imdb_id).first()
             if not item:
-                logging.info(f"Creating new Item for IMDB ID: {imdb_id}")
+                logger.info(f"Creating new Item for IMDB ID: {imdb_id}")
                 trakt = TraktMetadata()
                 show_metadata = trakt.get_show_metadata(imdb_id)
                 if show_metadata:
@@ -250,7 +269,7 @@ class MetadataManager:
                     session.add(item)
                     session.flush()
                 else:
-                    logging.error(f"Failed to fetch metadata for IMDB ID: {imdb_id}")
+                    logger.error(f"Failed to fetch metadata for IMDB ID: {imdb_id}")
                     return False
 
             for season_data in seasons_data:
@@ -263,7 +282,7 @@ class MetadataManager:
                 # Add more season attributes as needed
 
             session.commit()
-            logging.info(f"Seasons data updated for IMDB ID: {imdb_id}, Provider: {provider}")
+            logger.info(f"Seasons data updated for IMDB ID: {imdb_id}, Provider: {provider}")
         return True
 
     @staticmethod
@@ -271,7 +290,7 @@ class MetadataManager:
         with Session() as session:
             item = session.query(Item).filter_by(imdb_id=imdb_id).first()
             if not item:
-                logging.info(f"Creating new Item for IMDB ID: {imdb_id}")
+                logger.info(f"Creating new Item for IMDB ID: {imdb_id}")
                 trakt = TraktMetadata()
                 show_metadata = trakt.get_show_metadata(imdb_id)
                 if show_metadata:
@@ -284,13 +303,13 @@ class MetadataManager:
                     session.add(item)
                     session.flush()
                 else:
-                    logging.error(f"Failed to fetch metadata for IMDB ID: {imdb_id}")
+                    logger.error(f"Failed to fetch metadata for IMDB ID: {imdb_id}")
                     return False
 
             for episode_data in episodes_data:
                 season = session.query(Season).filter_by(item_id=item.id, season_number=episode_data['season']).first()
                 if not season:
-                    logging.info(f"Creating new Season for IMDB ID: {imdb_id}, Season: {episode_data['season']}")
+                    logger.info(f"Creating new Season for IMDB ID: {imdb_id}, Season: {episode_data['season']}")
                     season = Season(item_id=item.id, season_number=episode_data['season'])
                     session.add(season)
                     session.flush()
@@ -306,7 +325,7 @@ class MetadataManager:
                 episode.runtime = episode_data.get('runtime', 0)
 
             session.commit()
-            logging.info(f"Episodes data updated for IMDB ID: {imdb_id}, Provider: {provider}")
+            logger.info(f"Episodes data updated for IMDB ID: {imdb_id}, Provider: {provider}")
         return True
 
     @staticmethod
@@ -392,7 +411,7 @@ class MetadataManager:
         with Session() as session:
             item = session.query(Item).filter_by(imdb_id=imdb_id).first()
             if not item:
-                logging.error(f"Item with IMDB ID {imdb_id} not found when adding episodes.")
+                logger.error(f"Item with IMDB ID {imdb_id} not found when adding episodes.")
                 return
 
             for episode_data in episodes_data:
@@ -400,7 +419,7 @@ class MetadataManager:
                 episode_number = episode_data.get('episode')
                 
                 if season_number is None or episode_number is None:
-                    logging.warning(f"Skipping episode data without season or episode number for IMDB ID {imdb_id}")
+                    logger.warning(f"Skipping episode data without season or episode number for IMDB ID {imdb_id}")
                     continue
 
                 season = session.query(Season).filter_by(
@@ -409,7 +428,7 @@ class MetadataManager:
                 ).first()
 
                 if not season:
-                    logging.warning(f"Season {season_number} not found for IMDB ID {imdb_id}. Creating new season.")
+                    logger.warning(f"Season {season_number} not found for IMDB ID {imdb_id}. Creating new season.")
                     season = Season(item_id=item.id, season_number=season_number)
                     session.add(season)
                     session.flush()
@@ -439,10 +458,10 @@ class MetadataManager:
 
             try:
                 session.commit()
-                logging.info(f"Episodes updated for IMDB ID: {imdb_id}, Provider: {provider}")
+                logger.info(f"Episodes updated for IMDB ID: {imdb_id}, Provider: {provider}")
             except Exception as e:
                 session.rollback()
-                logging.error(f"Error updating episodes for IMDB ID {imdb_id}: {str(e)}")
+                logger.error(f"Error updating episodes for IMDB ID {imdb_id}: {str(e)}")
 
     @classmethod
     def get_release_dates(cls, imdb_id):

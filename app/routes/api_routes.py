@@ -1,7 +1,7 @@
 from flask import jsonify, Blueprint
 from app.settings import Settings
 from app.metadata_manager import MetadataManager
-import logging
+from app.logger_config import logger
 import json
 
 settings = Settings()
@@ -17,10 +17,10 @@ def get_movie_metadata(imdb_id):
             print(f"Successfully retrieved movie metadata for IMDB ID: {imdb_id} from {source}")
             return jsonify({"data": metadata, "source": source})
         else:
-            logging.warning(f"Movie metadata not found for IMDB ID: {imdb_id}")
+            logger.warning(f"Movie metadata not found for IMDB ID: {imdb_id}")
             return jsonify({"error": "Movie metadata not found"}), 404
     except Exception as e:
-        logging.error(f"Error fetching movie metadata: {str(e)}")
+        logger.error(f"Error fetching movie metadata: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @api_bp.route('/api/movie/release_dates/<imdb_id>', methods=['GET'])
@@ -32,10 +32,10 @@ def get_movie_release_dates(imdb_id):
             print(f"Successfully retrieved movie release dates for IMDB ID: {imdb_id}")
             return jsonify(release_dates)
         else:
-            logging.warning(f"Movie release dates not found for IMDB ID: {imdb_id}")
+            logger.warning(f"Movie release dates not found for IMDB ID: {imdb_id}")
             return jsonify({"error": "Movie release dates not found"}), 404
     except Exception as e:
-        logging.error(f"Error fetching movie release dates: {str(e)}")
+        logger.error(f"Error fetching movie release dates: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @api_bp.route('/api/episode/metadata/<imdb_id>', methods=['GET'])
@@ -47,10 +47,10 @@ def get_episode_metadata(imdb_id):
             print(f"Successfully retrieved episode metadata for IMDB ID: {imdb_id} from {source}")
             return jsonify({"data": metadata, "source": source})
         else:
-            logging.warning(f"Episode metadata not found for IMDB ID: {imdb_id}")
+            logger.warning(f"Episode metadata not found for IMDB ID: {imdb_id}")
             return jsonify({"error": "Episode metadata not found"}), 404
     except Exception as e:
-        logging.error(f"Error fetching episode metadata: {str(e)}")
+        logger.error(f"Error fetching episode metadata: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @api_bp.route('/api/show/metadata/<imdb_id>', methods=['GET'])
@@ -72,10 +72,10 @@ def get_show_metadata(imdb_id):
             print(f"Successfully retrieved show metadata for IMDB ID: {imdb_id} from {source}")
             return jsonify({"data": processed_metadata, "source": source})
         else:
-            logging.warning(f"Show metadata not found for IMDB ID: {imdb_id}")
+            logger.warning(f"Show metadata not found for IMDB ID: {imdb_id}")
             return jsonify({"error": "Show metadata not found"}), 404
     except Exception as e:
-        logging.error(f"Error fetching show metadata: {str(e)}")
+        logger.error(f"Error fetching show metadata: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @api_bp.route('/api/show/seasons/<imdb_id>', methods=['GET'])
@@ -87,10 +87,10 @@ def get_show_seasons(imdb_id):
             print(f"Successfully retrieved seasons for IMDB ID: {imdb_id}")
             return jsonify(seasons)
         else:
-            logging.warning(f"Seasons not found for IMDB ID: {imdb_id}")
+            logger.warning(f"Seasons not found for IMDB ID: {imdb_id}")
             return jsonify({"error": "Seasons not found"}), 404
     except Exception as e:
-        logging.error(f"Error fetching seasons: {str(e)}")
+        logger.error(f"Error fetching seasons: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @api_bp.route('/api/tmdb_to_imdb/<tmdb_id>', methods=['GET'])
@@ -103,8 +103,8 @@ def tmdb_to_imdb(tmdb_id):
             print(f"Successfully converted TMDB ID {tmdb_id} to IMDB ID {imdb_id}")
             return jsonify({"imdb_id": imdb_id})
         else:
-            logging.warning(f"No IMDB ID found for TMDB ID: {tmdb_id}")
+            logger.warning(f"No IMDB ID found for TMDB ID: {tmdb_id}")
             return jsonify({"error": f"No IMDB ID found for TMDB ID: {tmdb_id}"}), 404
     except Exception as e:
-        logging.error(f"Error in tmdb_to_imdb conversion: {str(e)}", exc_info=True)
+        logger.error(f"Error in tmdb_to_imdb conversion: {str(e)}", exc_info=True)
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500

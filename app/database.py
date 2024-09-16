@@ -6,6 +6,9 @@ from datetime import datetime
 from sqlalchemy import or_, func, cast, String
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.exc import IntegrityError
+from app.logger_config import logger
+from sqlalchemy import text
+
 
 # Remove the engine creation for now
 Session = scoped_session(sessionmaker())
@@ -110,14 +113,19 @@ class DatabaseManager:
             else:
                 item.type = 'movie'
 
-            metadata_objects = []
+            now = datetime.utcnow()
             for key, value in metadata_dict.items():
                 if key != 'type':
-                    metadata = Metadata(item_id=item.id, key=key, value=value, provider=provider)
-                    metadata_objects.append(metadata)
-            
-            session.bulk_save_objects(metadata_objects)
+                    metadata = session.query(Metadata).filter_by(item_id=item.id, key=key).first()
+                    if metadata:
+                        metadata.value = value
+                        metadata.last_updated = now
+                    else:
+                        metadata = Metadata(item_id=item.id, key=key, value=value, provider=provider, last_updated=now)
+                        session.add(metadata)
+
             session.commit()
+            logger.debug(f"Metadata for {imdb_id} updated in battery")
 
     @staticmethod
     def get_item(imdb_id):
@@ -163,8 +171,27 @@ class DatabaseManager:
         return None
 
 def init_db(app):
-    engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
-    Session.configure(bind=engine)
-    Base.metadata.create_all(engine)
-    app.logger.info("All database tables created successfully.")
-    return engine
+    connection_strings = [
+        app.config['SQLALCHEMY_DATABASE_URI'],
+        'postgresql://cli_debrid:cli_debrid@localhost:5433/cli_battery_database',
+        'sqlite:///fallback.db'  # SQLite fallback as last resort
+    ]
+
+    for connection_string in connection_strings:
+        try:
+            print(f"Attempting to connect to database: {connection_string}")
+            engine = create_engine(connection_string)
+            # Test the connection
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            
+            Session.configure(bind=engine)
+            Base.metadata.create_all(engine)
+            logger.info(f"Successfully connected to database: {connection_string}")
+            logger.info("All database tables created successfully.")
+            return engine
+        except Exception as e:
+            logger.error(f"Failed to connect to {connection_string}: {str(e)}")
+    
+    logger.critical("All database connection attempts failed.")
+    raise Exception("Unable to connect to any database")

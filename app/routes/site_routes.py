@@ -2,7 +2,6 @@ from flask import render_template, request, jsonify, send_file, redirect, url_fo
 from app.settings import Settings
 from app.metadata_manager import MetadataManager
 import io
-import logging
 from app.trakt_auth import TraktAuth
 from flask import flash
 from sqlalchemy import inspect
@@ -25,7 +24,7 @@ def home():
         'total_items': db_stats['total_items'],
         'total_metadata': db_stats['total_metadata'],
         'last_update': db_stats['last_update'].strftime('%Y-%m-%d %H:%M:%S') if db_stats['last_update'] else 'N/A',
-        'stalesness_threshold': f"{settings.stalesness_threshold} days"
+        'staleness_threshold': f"{settings.staleness_threshold} days"
     }
     return render_template('home.html', stats=stats)
 

@@ -1,4 +1,4 @@
-import logging
+from app.logger_config import logger
 import json
 import time
 import os
@@ -35,12 +35,10 @@ class TraktMetadata:
         self.refresh_token = self.settings.Trakt.get('refresh_token')
         self.expires_at = self.settings.Trakt.get('expires_at')
 
-        logging.info(f"Trakt settings: client_id={self.client_id}, client_secret={'*' * len(self.client_secret) if self.client_secret else 'Not set'}")
-
     def _make_request(self, url):
         if not trakt_auth.is_authenticated():
             if not trakt_auth.refresh_access_token():
-                logging.error("Failed to authenticate with Trakt.")
+                logger.error("Failed to authenticate with Trakt.")
                 return None
 
         headers = {
@@ -54,12 +52,12 @@ class TraktMetadata:
             response.raise_for_status()
             return response
         except requests.exceptions.RequestException as e:
-            logging.error(f"Error making request to Trakt API: {e}")
-            logging.error(f"URL: {url}")
-            logging.error(f"Headers: {headers}")
+            logger.error(f"Error making request to Trakt API: {e}")
+            logger.error(f"URL: {url}")
+            logger.error(f"Headers: {headers}")
             if hasattr(e, 'response') and e.response is not None:
-                logging.error(f"Response status code: {e.response.status_code}")
-                logging.error(f"Response text: {e.response.text}")
+                logger.error(f"Response status code: {e.response.status_code}")
+                logger.error(f"Response text: {e.response.text}")
             return None
 
     def fetch_items_from_trakt(self, endpoint: str) -> List[Dict[str, Any]]:
@@ -67,16 +65,16 @@ class TraktMetadata:
             return []
 
         full_url = f"{TRAKT_API_URL}{endpoint}"
-        logging.debug(f"Fetching items from Trakt URL: {full_url}")
+        logger.debug(f"Fetching items from Trakt URL: {full_url}")
 
         try:
             response = requests.get(full_url, headers=self.headers, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            logging.error(f"Error fetching items from Trakt: {e}")
+            logger.error(f"Error fetching items from Trakt: {e}")
             if hasattr(e, 'response') and e.response is not None:
-                logging.error(f"Response text: {e.response.text}")
+                logger.error(f"Response text: {e.response.text}")
             return []
 
     def get_metadata(self, imdb_id: str) -> Dict[str, Any]:
@@ -176,7 +174,7 @@ class TraktMetadata:
         if response.status_code == 200:
             return response.json()
         else:
-            logging.error(f"Failed to fetch movie metadata from Trakt: {response.text}")
+            logger.error(f"Failed to fetch movie metadata from Trakt: {response.text}")
             return None
 
     def get_poster(self, imdb_id: str) -> str:
@@ -201,7 +199,7 @@ class TraktMetadata:
                             'type': release_type
                         })
                     except iso8601.ParseError:
-                        logging.warning(f"Could not parse date: {release_date} for {imdb_id} in {country}")
+                        logger.warning(f"Could not parse date: {release_date} for {imdb_id} in {country}")
             return dict(formatted_releases)  # Convert defaultdict to regular dict
         return None
 

@@ -5,11 +5,11 @@
     <div class="settings-section-content active">
         <div class="settings-form-group">
             <label for="trakt_client_id" class="settings-title">Client ID:</label>
-            <input type="text" id="trakt_client_id" name="trakt_client_id" class="settings-input" value="{{ settings.Trakt.client_id }}">
+            <input type="text" id="trakt_client_id" name="Trakt[client_id]" class="settings-input" value="{{ settings.Trakt.client_id }}">
         </div>
         <div class="settings-form-group">
             <label for="trakt_client_secret" class="settings-title">Client Secret:</label>
-            <input type="password" id="trakt_client_secret" name="trakt_client_secret" class="settings-input" value="{{ settings.Trakt.client_secret }}">
+            <input type="password" id="trakt_client_secret" name="Trakt[client_secret]" class="settings-input" value="{{ settings.Trakt.client_secret }}">
         </div>
         <div class="settings-form-group">
             <button type="button" id="authorizeTraktButton" class="btn btn-primary">Authorize Trakt</button>
@@ -127,6 +127,9 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }, 500));
     }
+
+    autoSaveField(document.getElementById('trakt_client_id'));
+    autoSaveField(document.getElementById('trakt_client_secret'));
 
     function debounce(func, wait) {
         let timeout;

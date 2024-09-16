@@ -2,7 +2,7 @@ from flask import render_template, request, jsonify, send_file, redirect, url_fo
 from app.settings import Settings
 from app.metadata_manager import MetadataManager
 import io
-import logging
+from app.logger_config import logger
 from app.trakt_auth import TraktAuth
 from flask import flash
 from sqlalchemy import inspect
@@ -125,5 +125,5 @@ def save_settings():
 
         return jsonify({"success": True})
     except Exception as e:
-        logging.error(f"Error saving settings: {str(e)}", exc_info=True)
+        logger.error(f"Error saving settings: {str(e)}", exc_info=True)
         return jsonify({"success": False, "error": str(e)})

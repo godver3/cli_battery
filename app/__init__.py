@@ -10,7 +10,13 @@ def create_app():
         init_db(app)
 
     # Import and register blueprints
-    from app.routes import main_bp
+    from app.routes.site_routes import main_bp
+    from app.routes.api_routes import api_bp
+    from app.routes.trakt_routes import trakt_bp
+    from app.routes.settings_routes import settings_bp
     app.register_blueprint(main_bp)
+    app.register_blueprint(api_bp)
+    app.register_blueprint(trakt_bp)
+    app.register_blueprint(settings_bp)
 
     return app

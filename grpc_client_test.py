@@ -115,6 +115,7 @@ def run():
         movie_response = stub.GetMovieMetadata(movie_request)
         print("GetMovieMetadata response:")
         print_nested_dict(dict(movie_response.metadata))
+        print(f"Source: {movie_response.source}")
         input("Press Enter to continue...")
 
         # Test GetMovieReleaseDates
@@ -125,16 +126,8 @@ def run():
         print(f"Source: {release_dates_response.source}")
         print("Release Dates:")
         print(json.dumps(json.loads(release_dates_response.release_dates), indent=2))
+        print(f"Source: {release_dates_response.source}")
         input("Press Enter to continue...")
-        '''
-        # Test GetEpisodeMetadata
-        print("\n--- Testing GetEpisodeMetadata ---")
-        episode_request = metadata_service_pb2.IMDbRequest(imdb_id='tt1480055')  # Game of Thrones S01E01
-        episode_response = stub.GetEpisodeMetadata(episode_request)
-        print("GetEpisodeMetadata response:")
-        print_nested_dict(dict(episode_response.metadata))
-        input("Press Enter to continue...")
-        '''
 
         # Test GetShowMetadata
         print("\n--- Testing GetShowMetadata ---")
@@ -142,6 +135,16 @@ def run():
         show_response = stub.GetShowMetadata(show_request)
         print("GetShowMetadata response:")
         print_nested_dict(dict(show_response.metadata))
+        print(f"Source: {show_response.source}")
+        input("Press Enter to continue...")
+        
+        # Test GetEpisodeMetadata
+        print("\n--- Testing GetEpisodeMetadata ---")
+        episode_request = metadata_service_pb2.IMDbRequest(imdb_id='tt1480055')  # Game of Thrones S01E01
+        episode_response = stub.GetEpisodeMetadata(episode_request)
+        print("GetEpisodeMetadata response:")
+        print_nested_dict(dict(episode_response.metadata))
+        print(f"Source: {episode_response.source}")
         input("Press Enter to continue...")
 
         # Test GetShowSeasons
@@ -149,39 +152,25 @@ def run():
         seasons_request = metadata_service_pb2.IMDbRequest(imdb_id='tt0944947')  # Game of Thrones
         seasons_response = stub.GetShowSeasons(seasons_request)
         print("GetShowSeasons response:")
-        print(json.dumps([{"season_number": s.season_number, "episode_count": s.episode_count} for s in seasons_response.seasons], indent=2))
+        seasons_data = [
+            {
+                "season_number": season.season_number,
+                "episode_count": season.episode_count
+            }
+            for season in seasons_response.seasons
+        ]
+        print(json.dumps(seasons_data, indent=2))
+        print(f"Source: {seasons_response.source}")
         input("Press Enter to continue...")
 
         # Test TMDbToIMDb
         print("\n--- Testing TMDbToIMDb ---")
-        tmdb_request = metadata_service_pb2.TMDbRequest(tmdb_id='550')  # Fight Club
+        tmdb_request = metadata_service_pb2.TMDbRequest(tmdb_id='957452')  # Fight Club
         tmdb_response = stub.TMDbToIMDb(tmdb_request)
         print("TMDbToIMDb response:")
         print(json.dumps({"imdb_id": tmdb_response.imdb_id}, indent=2))
+        print(f"Source: {tmdb_response.source}")
         input("Press Enter to continue...")
-
-        # Test BatchGetMetadata
-        print("\n--- Testing BatchGetMetadata ---")
-        batch_request = metadata_service_pb2.BatchIMDbRequest(imdb_ids=['tt0111161', 'tt0944947'])  # The Shawshank Redemption, Game of Thrones
-        batch_response = stub.BatchGetMetadata(batch_request)
-        print("BatchGetMetadata response:")
-        for imdb_id, metadata_response in batch_response.results.items():
-            print(f"\nMetadata for {imdb_id}:")
-            print_nested_dict(dict(metadata_response.metadata))
-            input("Press Enter to continue...")
-
-        # Compare gRPC with Flask API
-        print("\n--- Comparing gRPC with Flask API ---")
-        comparison_results = compare_grpc_with_flask()
-        for key, value in comparison_results.items():
-            print(f"\n{key}:")
-            print(f"Match: {value['match']}")
-            if not value['match']:
-                print("Flask API result:")
-                print_nested_dict(value['flask'])
-                print("gRPC result:")
-                print_nested_dict(value['grpc'])
-            input("Press Enter to continue...")
 
 if __name__ == '__main__':
     run()

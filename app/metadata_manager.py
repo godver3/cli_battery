@@ -1,4 +1,4 @@
-from app.database import Session, Item, Metadata, Season, Episode, TMDBToIMDBMapping
+from app.database import DatabaseManager, Session, Item, Metadata, Season, Episode, TMDBToIMDBMapping
 from datetime import datetime, timedelta
 from sqlalchemy import func, cast, String, or_
 from sqlalchemy.orm import joinedload
@@ -16,47 +16,11 @@ from sqlalchemy.exc import IntegrityError
 class MetadataManager:
     @staticmethod
     def add_or_update_item(imdb_id, title, year=None, item_type=None):
-        with Session() as session:
-            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
-            if item:
-                item.title = title
-                if year is not None:
-                    item.year = year
-                if item_type is not None:
-                    item.type = item_type
-                item.updated_at = datetime.utcnow()
-            else:
-                item = Item(imdb_id=imdb_id, title=title, year=year, type=item_type)
-                session.add(item)
-            session.commit()
-            return item.id
+        return DatabaseManager.add_or_update_item(imdb_id, title, year, item_type)
 
     @staticmethod
     def add_or_update_metadata(imdb_id, metadata_dict, provider):
-        with Session() as session:
-            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
-            if not item:
-                item = Item(imdb_id=imdb_id, title=metadata_dict.get('title', ''))
-                session.add(item)
-                session.flush()
-
-            item_type = metadata_dict.get('type')
-            if item_type:
-                item.type = item_type
-            elif 'aired_episodes' in metadata_dict:
-                item.type = 'show'
-            else:
-                item.type = 'movie'
-
-            metadata_objects = []
-            for key, value in metadata_dict.items():
-                if key != 'type':
-                    metadata = Metadata(item_id=item.id, key=key, value=value, provider=provider)
-                    metadata_objects.append(metadata)
-            
-            session.bulk_save_objects(metadata_objects)
-            session.commit()
-            logging.info(f"Metadata updated for IMDB ID: {imdb_id}, Provider: {provider}")
+        DatabaseManager.add_or_update_metadata(imdb_id, metadata_dict, provider)
 
     @staticmethod
     def debug_find_item(imdb_id):
@@ -125,50 +89,30 @@ class MetadataManager:
 
     @staticmethod
     def get_item(imdb_id):
-        with Session() as session:
-            return session.query(Item).options(joinedload(Item.item_metadata), joinedload(Item.poster)).filter_by(imdb_id=imdb_id).first()
+        return DatabaseManager.get_item(imdb_id)
 
     @staticmethod
     def get_all_items():
-        with Session() as session:
-            items = session.query(Item).options(joinedload(Item.item_metadata)).all()
-            for item in items:
-                year_metadata = next((m.value for m in item.item_metadata if m.key == 'year'), None)
-            return items
+        return DatabaseManager.get_all_items()
 
     @staticmethod
     def delete_item(imdb_id):
-        with Session() as session:
-            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
-            if item:
-                session.delete(item)
-                session.commit()
-                return True
-            return False
+        return DatabaseManager.delete_item(imdb_id)
 
     @staticmethod
     def add_or_update_poster(item_id, image_data):
-        with Session() as session:
-            poster = session.query(Poster).filter_by(item_id=item_id).first()
-            if poster:
-                poster.image_data = image_data
-                poster.last_updated = datetime.utcnow()
-            else:
-                poster = Poster(item_id=item_id, image_data=image_data)
-                session.add(poster)
-            session.commit()
+        DatabaseManager.add_or_update_poster(item_id, image_data)
 
     @staticmethod
-    def get_poster(imdb_id: str):
-        with Session() as session:
-            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
-            if item and item.poster:
-                return item.poster.image_data
+    def get_poster(imdb_id):
+        poster_data = DatabaseManager.get_poster(imdb_id)
+        if poster_data:
+            return poster_data
 
         # If poster not in database, fetch from Trakt
         trakt = TraktMetadata()
         poster_url = trakt.get_poster(imdb_id)
-        if (poster_url):
+        if poster_url:
             response = requests.get(poster_url)
             if response.status_code == 200:
                 image = Image.open(BytesIO(response.content))
@@ -533,11 +477,11 @@ class MetadataManager:
             # Check if the mapping exists in the cache
             cached_mapping = session.query(TMDBToIMDBMapping).filter_by(tmdb_id=tmdb_id).first()
             if cached_mapping:
-                return cached_mapping.imdb_id
+                return cached_mapping.imdb_id, 'battery'
 
             # If not in cache, fetch from Trakt
             trakt = TraktMetadata()
-            imdb_id = trakt.convert_tmdb_to_imdb(tmdb_id)
+            imdb_id, source = trakt.convert_tmdb_to_imdb(tmdb_id)
             
             if imdb_id:
                 # Cache the result
@@ -545,7 +489,7 @@ class MetadataManager:
                 session.add(new_mapping)
                 session.commit()
             
-            return imdb_id
+            return imdb_id, source
         
     @staticmethod
     def get_metadata_by_episode_imdb(episode_imdb_id):
@@ -558,8 +502,21 @@ class MetadataManager:
             
             if episode_metadata:
                 item = episode_metadata.item
-                show_metadata = {m.key: json.loads(m.value) if isinstance(m.value, str) else m.value for m in item.item_metadata}
-                episode_data = json.loads(episode_metadata.value) if isinstance(episode_metadata.value, str) else episode_metadata.value
+                show_metadata = {}
+                for m in item.item_metadata:
+                    if isinstance(m.value, str):
+                        try:
+                            show_metadata[m.key] = json.loads(m.value)
+                        except json.JSONDecodeError:
+                            show_metadata[m.key] = m.value
+                    else:
+                        show_metadata[m.key] = m.value
+                
+                try:
+                    episode_data = json.loads(episode_metadata.value) if isinstance(episode_metadata.value, str) else episode_metadata.value
+                except json.JSONDecodeError:
+                    episode_data = episode_metadata.value
+                
                 return {'show': show_metadata, 'episode': episode_data}, "battery"
 
         # If not in database, fetch from Trakt
@@ -569,9 +526,6 @@ class MetadataManager:
             show_imdb_id = trakt_data['show']['imdb_id']
             show_metadata = trakt_data['show']['metadata']
             episode_data = trakt_data['episode']
-
-            # Save show metadata
-            MetadataManager.add_or_update_metadata(show_imdb_id, show_metadata, 'Trakt')
 
             # Save episode metadata
             with Session() as session:

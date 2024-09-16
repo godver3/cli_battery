@@ -63,9 +63,29 @@
     </div>
     <div class="stat-card">
         <i class="fas fa-sync stat-icon"></i>
-        <h3>Update Frequency</h3>
-        <p class="stat-value">{{ stats.update_frequency }}</p>
+        <h3>Staleness Threshold</h3>
+        <p class="stat-value">{{ stats.stalesness_threshold }}</p>
     </div>
 </div>
+
+<style>
+    @media (max-width: 768px) {
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .stat-card {
+            padding: 15px;
+        }
+
+        .stat-icon {
+            font-size: 1.5em;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+        }
+    }
+</style>
 
 {% endblock %}

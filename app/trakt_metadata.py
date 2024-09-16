@@ -17,10 +17,12 @@ from datetime import datetime, timedelta
 import iso8601
 from datetime import timezone
 from collections import defaultdict
+from app.trakt_auth import TraktAuth
 
 TRAKT_API_URL = "https://api.trakt.tv"
 CACHE_FILE = 'db_content/trakt_last_activity.pkl'
 REQUEST_TIMEOUT = 10  # seconds
+trakt_auth = TraktAuth()
 
 class TraktMetadata:
     def __init__(self):
@@ -29,49 +31,36 @@ class TraktMetadata:
         self.client_id = self.settings.Trakt.get('client_id')
         self.client_secret = self.settings.Trakt.get('client_secret')
         self.redirect_uri = "http://192.168.1.51:5001/trakt_callback"
+        self.access_token = self.settings.Trakt.get('access_token')
+        self.refresh_token = self.settings.Trakt.get('refresh_token')
+        self.expires_at = self.settings.Trakt.get('expires_at')
 
-        # Log Trakt settings for debugging
         logging.info(f"Trakt settings: client_id={self.client_id}, client_secret={'*' * len(self.client_secret) if self.client_secret else 'Not set'}")
 
-    def load_trakt_credentials(self) -> Dict[str, str]:
-        try:
-            with open('config/.pytrakt.json', 'r') as file:
-                return json.load(file)
-        except FileNotFoundError:
-            logging.error("Trakt credentials file not found.")
-            return {}
-        except json.JSONDecodeError:
-            logging.error("Error decoding Trakt credentials file.")
-            return {}
+    def _make_request(self, url):
+        if not trakt_auth.is_authenticated():
+            if not trakt_auth.refresh_access_token():
+                logging.error("Failed to authenticate with Trakt.")
+                return None
 
-    def get_trakt_headers(self) -> Dict[str, str]:
-        client_id = self.credentials.get('CLIENT_ID')
-        access_token = self.credentials.get('OAUTH_TOKEN')
-        if not client_id or not access_token:
-            logging.error("Trakt API credentials not set. Please configure in settings.")
-            return {}
-        return {
+        headers = {
             'Content-Type': 'application/json',
             'trakt-api-version': '2',
-            'trakt-api-key': client_id,
-            'Authorization': f'Bearer {access_token}'
+            'trakt-api-key': self.client_id,
+            'Authorization': f'Bearer {self.access_token}'
         }
-
-    def ensure_trakt_auth(self):
-        if not self.client_id or not self.client_secret:
-            raise ValueError("Trakt client ID and secret must be set")
-        if self.is_authenticated():
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            return response
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error making request to Trakt API: {e}")
+            logging.error(f"URL: {url}")
+            logging.error(f"Headers: {headers}")
+            if hasattr(e, 'response') and e.response is not None:
+                logging.error(f"Response status code: {e.response.status_code}")
+                logging.error(f"Response text: {e.response.text}")
             return None
-        return self.get_device_code()
-
-    def get_device_code(self, client_id: str, client_secret: str) -> Dict[str, Any]:
-        url = f"{TRAKT_API_URL}/oauth/device/code"
-        data = {
-            "client_id": client_id
-        }
-        response = requests.post(url, json=data, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        return response.json()
 
     def fetch_items_from_trakt(self, endpoint: str) -> List[Dict[str, Any]]:
         if not self.headers:
@@ -172,80 +161,8 @@ class TraktMetadata:
             return processed_episodes
         return None
 
-    def _make_request(self, url):
-        headers = {
-            'Content-Type': 'application/json',
-            'trakt-api-version': '2',
-            'trakt-api-key': self.client_id,
-            'Authorization': f'Bearer {self.settings.Trakt["access_token"]}'
-        }
-        try:
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-            return response
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Error making request to Trakt API: {e}")
-            logging.error(f"URL: {url}")
-            logging.error(f"Headers: {headers}")
-            if hasattr(e, 'response') and e.response is not None:
-                logging.error(f"Response status code: {e.response.status_code}")
-                logging.error(f"Response text: {e.response.text}")
-            return None
-
     def refresh_metadata(self, imdb_id: str) -> Dict[str, Any]:
         return self.get_metadata(imdb_id)
-
-    def get_authorization_url(self):
-        params = {
-            "response_type": "code",
-            "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
-        }
-        auth_url = f"{self.base_url}/oauth/authorize?{urlencode(params)}"
-        logging.info(f"Generated Trakt authorization URL: {auth_url}")
-        return auth_url
-
-    def exchange_code_for_token(self, code):
-        data = {
-            'code': code,
-            'client_id': self.client_id,
-            'client_secret': self.client_secret,
-            'redirect_uri': self.redirect_uri,
-            'grant_type': 'authorization_code'
-        }
-        response = requests.post(f"{self.base_url}/oauth/token", json=data)
-        if response.status_code == 200:
-            token_data = response.json()
-            self.save_token_data(token_data)
-            return True
-        else:
-            logging.error(f"Failed to exchange code for token: {response.text}")
-            return False
-
-    def save_token_data(self, token_data):
-        self.settings.Trakt['access_token'] = token_data['access_token']
-        self.settings.Trakt['refresh_token'] = token_data['refresh_token']
-        self.settings.Trakt['expires_at'] = (datetime.now() + timedelta(seconds=token_data['expires_in'])).isoformat()
-        self.settings.save_settings()
-        logging.info("Trakt token data saved successfully.")
-
-    def save_trakt_credentials(self):
-        credentials = {
-            'ACCESS_TOKEN': trakt.core.OAUTH_TOKEN,
-            'REFRESH_TOKEN': trakt.core.OAUTH_REFRESH,
-            'EXPIRES_AT': trakt.core.OAUTH_EXPIRES_AT
-        }
-        with open('config/.pytrakt.json', 'w') as f:
-            json.dump(credentials, f)
-
-    def is_authenticated(self):
-        access_token = self.settings.Trakt.get('access_token')
-        expires_at = self.settings.Trakt.get('expires_at')
-        if not access_token or not expires_at:
-            return False
-        expires_at = iso8601.parse_date(expires_at)
-        now = datetime.now(timezone.utc)
-        return now < expires_at.astimezone(timezone.utc)
 
     def get_movie_metadata(self, imdb_id):
         headers = {
@@ -296,10 +213,10 @@ class TraktMetadata:
             if data:
                 item = data[0]
                 if 'movie' in item:
-                    return item['movie']['ids']['imdb']
+                    return item['movie']['ids']['imdb'], 'trakt'
                 elif 'show' in item:
-                    return item['show']['ids']['imdb']
-        return None
+                    return item['show']['ids']['imdb'], 'trakt'
+        return None, None
     
     def get_show_metadata(self, imdb_id):
         url = f"{self.base_url}/shows/{imdb_id}?extended=full,episodes"
@@ -316,18 +233,20 @@ class TraktMetadata:
                 # Add episode IMDb IDs to the show data
                 show_data['seasons'] = []
                 for season in seasons_data:
-                    season_info = {
-                        'number': season['number'],
-                        'episodes': []
-                    }
-                    for episode in season.get('episodes', []):
-                        episode_info = {
-                            'number': episode['number'],
-                            'title': episode['title'],
-                            'imdb_id': episode['ids'].get('imdb')
+                    if season['number'] is not None and season['number'] > 0:
+                        season_info = {
+                            'number': season['number'],
+                            'episodes': []
                         }
-                        season_info['episodes'].append(episode_info)
-                    show_data['seasons'].append(season_info)
+                        for episode in season.get('episodes', []):
+                            episode_info = {
+                                'number': episode['number'],
+                                'title': episode['title'],
+                                'imdb_id': episode['ids'].get('imdb'),
+                                'runtime': episode.get('runtime', 0)
+                            }
+                            season_info['episodes'].append(episode_info)
+                        show_data['seasons'].append(season_info)
             
             return show_data
         return None

@@ -20,6 +20,8 @@ services:
     container_name: cli_battery_app
     environment:
       - DATABASE_URL=postgresql://cli_debrid:cli_debrid@db:5432/cli_battery_database
+    volumes:
+      - cli_battery_data:/user
     depends_on:
       - db
     ports:
@@ -34,3 +36,4 @@ networks:
 
 volumes:
   cli_postgres_data:
+  cli_battery_data:

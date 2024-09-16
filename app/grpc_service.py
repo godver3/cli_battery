@@ -83,45 +83,25 @@ class MetadataServicer(metadata_service_pb2_grpc.MetadataServiceServicer):
         return metadata_service_pb2.MetadataResponse(metadata=processed_metadata, source=source)
 
     def GetShowSeasons(self, request, context):
-        seasons_data, source = DirectAPI.get_show_seasons(request.imdb_id)
+        imdb_id = request.imdb_id
+        seasons_data, source = DirectAPI.get_show_seasons(imdb_id)
+        
         if seasons_data is None:
-            context.set_code(grpc.StatusCode.NOT_FOUND)
-            context.set_details(f"Seasons not found for IMDB ID: {request.imdb_id}")
-            return metadata_service_pb2.ShowSeasonsResponse()
-
-        seasons_response = {}
+            return metadata_service_pb2.ShowSeasonsResponse(seasons=[])
+        
+        seasons_list = []
         for season_number, season_info in seasons_data.items():
-            episodes = {}
-            for episode_number, episode_info in season_info['episodes'].items():
-                episodes[episode_number] = metadata_service_pb2.EpisodeInfo(
-                    first_aired=episode_info.get('first_aired', ''),
-                    runtime=episode_info.get('runtime', 0),
-                    title=episode_info.get('title', '')
-                )
-            seasons_response[str(season_number)] = metadata_service_pb2.SeasonInfo(
-                episode_count=season_info['episode_count'],
-                episodes=episodes
+            season = metadata_service_pb2.Season(
+                season_number=int(season_number),
+                episode_count=season_info['episode_count']
             )
-
-        return metadata_service_pb2.ShowSeasonsResponse(seasons=seasons_response, source=source)
+            seasons_list.append(season)
+        
+        return metadata_service_pb2.ShowSeasonsResponse(seasons=seasons_list, source=source)
 
     def TMDbToIMDb(self, request, context):
-        imdb_id = DirectAPI.tmdb_to_imdb(request.tmdb_id)
-        return metadata_service_pb2.IMDbResponse(imdb_id=imdb_id)
-
-    def BatchGetMetadata(self, request, context):
-        results = DirectAPI.batch_get_metadata(request.imdb_ids)
-        batch_response = {}
-        for imdb_id, metadata in results.items():
-            string_metadata = {}
-            for k, v in metadata.items():
-                if isinstance(v, (dict, list)):
-                    string_metadata[k] = json.dumps(v)
-                else:
-                    string_metadata[k] = str(v)
-            batch_response[imdb_id] = metadata_service_pb2.MetadataResponse(metadata=string_metadata, source='')
-        
-        return metadata_service_pb2.BatchMetadataResponse(results=batch_response)
+        imdb_id, source = DirectAPI.tmdb_to_imdb(request.tmdb_id)
+        return metadata_service_pb2.IMDbResponse(imdb_id=imdb_id, source=source)
 
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))

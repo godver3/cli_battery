@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16metadata_service.proto\x12\x08metadata\"\x1e\n\x0bIMDbRequest\x12\x0f\n\x07imdb_id\x18\x01 \x01(\t\"\x1e\n\x0bTMDbRequest\x12\x0f\n\x07tmdb_id\x18\x01 \x01(\t\"\x8f\x01\n\x10MetadataResponse\x12:\n\x08metadata\x18\x01 \x03(\x0b\x32(.metadata.MetadataResponse.MetadataEntry\x12\x0e\n\x06source\x18\x02 \x01(\t\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"=\n\x14ReleaseDatesResponse\x12\x15\n\rrelease_dates\x18\x01 \x01(\t\x12\x0e\n\x06source\x18\x02 \x01(\t\"D\n\x0fSeasonsResponse\x12!\n\x07seasons\x18\x01 \x03(\x0b\x32\x10.metadata.Season\x12\x0e\n\x06source\x18\x02 \x01(\t\"[\n\x06Season\x12\x15\n\rseason_number\x18\x01 \x01(\x05\x12\x15\n\repisode_count\x18\x02 \x01(\x05\x12#\n\x08\x65pisodes\x18\x03 \x03(\x0b\x32\x11.metadata.Episode\"V\n\x07\x45pisode\x12\x16\n\x0e\x65pisode_number\x18\x01 \x01(\x05\x12\r\n\x05title\x18\x02 \x01(\t\x12\x13\n\x0b\x66irst_aired\x18\x03 \x01(\t\x12\x0f\n\x07runtime\x18\x04 \x01(\x05\"\x1f\n\x0cIMDbResponse\x12\x0f\n\x07imdb_id\x18\x01 \x01(\t\"$\n\x10\x42\x61tchIMDbRequest\x12\x10\n\x08imdb_ids\x18\x01 \x03(\t\"\xa2\x01\n\x15\x42\x61tchMetadataResponse\x12=\n\x07results\x18\x01 \x03(\x0b\x32,.metadata.BatchMetadataResponse.ResultsEntry\x1aJ\n\x0cResultsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12)\n\x05value\x18\x02 \x01(\x0b\x32\x1a.metadata.MetadataResponse:\x02\x38\x01\"\xa8\x01\n\x13ShowSeasonsResponse\x12;\n\x07seasons\x18\x01 \x03(\x0b\x32*.metadata.ShowSeasonsResponse.SeasonsEntry\x12\x0e\n\x06source\x18\x02 \x01(\t\x1a\x44\n\x0cSeasonsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12#\n\x05value\x18\x02 \x01(\x0b\x32\x14.metadata.SeasonInfo:\x02\x38\x01\"\xa1\x01\n\nSeasonInfo\x12\x15\n\repisode_count\x18\x01 \x01(\x05\x12\x34\n\x08\x65pisodes\x18\x02 \x03(\x0b\x32\".metadata.SeasonInfo.EpisodesEntry\x1a\x46\n\rEpisodesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12$\n\x05value\x18\x02 \x01(\x0b\x32\x15.metadata.EpisodeInfo:\x02\x38\x01\"B\n\x0b\x45pisodeInfo\x12\x13\n\x0b\x66irst_aired\x18\x01 \x01(\t\x12\x0f\n\x07runtime\x18\x02 \x01(\x05\x12\r\n\x05title\x18\x03 \x01(\t2\x9a\x04\n\x0fMetadataService\x12O\n\x14GetMovieReleaseDates\x12\x15.metadata.IMDbRequest\x1a\x1e.metadata.ReleaseDatesResponse\"\x00\x12G\n\x10GetMovieMetadata\x12\x15.metadata.IMDbRequest\x1a\x1a.metadata.MetadataResponse\"\x00\x12I\n\x12GetEpisodeMetadata\x12\x15.metadata.IMDbRequest\x1a\x1a.metadata.MetadataResponse\"\x00\x12\x46\n\x0fGetShowMetadata\x12\x15.metadata.IMDbRequest\x1a\x1a.metadata.MetadataResponse\"\x00\x12H\n\x0eGetShowSeasons\x12\x15.metadata.IMDbRequest\x1a\x1d.metadata.ShowSeasonsResponse\"\x00\x12=\n\nTMDbToIMDb\x12\x15.metadata.TMDbRequest\x1a\x16.metadata.IMDbResponse\"\x00\x12Q\n\x10\x42\x61tchGetMetadata\x12\x1a.metadata.BatchIMDbRequest\x1a\x1f.metadata.BatchMetadataResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16metadata_service.proto\x12\x08metadata\"\x1e\n\x0bIMDbRequest\x12\x0f\n\x07imdb_id\x18\x01 \x01(\t\"\x1e\n\x0bTMDbRequest\x12\x0f\n\x07tmdb_id\x18\x01 \x01(\t\"\x8f\x01\n\x10MetadataResponse\x12:\n\x08metadata\x18\x01 \x03(\x0b\x32(.metadata.MetadataResponse.MetadataEntry\x12\x0e\n\x06source\x18\x02 \x01(\t\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"=\n\x14ReleaseDatesResponse\x12\x15\n\rrelease_dates\x18\x01 \x01(\t\x12\x0e\n\x06source\x18\x02 \x01(\t\"D\n\x0fSeasonsResponse\x12!\n\x07seasons\x18\x01 \x03(\x0b\x32\x10.metadata.Season\x12\x0e\n\x06source\x18\x02 \x01(\t\"6\n\x06Season\x12\x15\n\rseason_number\x18\x01 \x01(\x05\x12\x15\n\repisode_count\x18\x02 \x01(\x05\"V\n\x07\x45pisode\x12\x16\n\x0e\x65pisode_number\x18\x01 \x01(\x05\x12\r\n\x05title\x18\x02 \x01(\t\x12\x13\n\x0b\x66irst_aired\x18\x03 \x01(\t\x12\x0f\n\x07runtime\x18\x04 \x01(\x05\"/\n\x0cIMDbResponse\x12\x0f\n\x07imdb_id\x18\x01 \x01(\t\x12\x0e\n\x06source\x18\x02 \x01(\t\"$\n\x10\x42\x61tchIMDbRequest\x12\x10\n\x08imdb_ids\x18\x01 \x03(\t\"\xa2\x01\n\x15\x42\x61tchMetadataResponse\x12=\n\x07results\x18\x01 \x03(\x0b\x32,.metadata.BatchMetadataResponse.ResultsEntry\x1aJ\n\x0cResultsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12)\n\x05value\x18\x02 \x01(\x0b\x32\x1a.metadata.MetadataResponse:\x02\x38\x01\"H\n\x13ShowSeasonsResponse\x12!\n\x07seasons\x18\x01 \x03(\x0b\x32\x10.metadata.Season\x12\x0e\n\x06source\x18\x02 \x01(\t\"\xa1\x01\n\nSeasonInfo\x12\x15\n\repisode_count\x18\x01 \x01(\x05\x12\x34\n\x08\x65pisodes\x18\x02 \x03(\x0b\x32\".metadata.SeasonInfo.EpisodesEntry\x1a\x46\n\rEpisodesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12$\n\x05value\x18\x02 \x01(\x0b\x32\x15.metadata.EpisodeInfo:\x02\x38\x01\"B\n\x0b\x45pisodeInfo\x12\x13\n\x0b\x66irst_aired\x18\x01 \x01(\t\x12\x0f\n\x07runtime\x18\x02 \x01(\x05\x12\r\n\x05title\x18\x03 \x01(\t2\x9a\x04\n\x0fMetadataService\x12O\n\x14GetMovieReleaseDates\x12\x15.metadata.IMDbRequest\x1a\x1e.metadata.ReleaseDatesResponse\"\x00\x12G\n\x10GetMovieMetadata\x12\x15.metadata.IMDbRequest\x1a\x1a.metadata.MetadataResponse\"\x00\x12I\n\x12GetEpisodeMetadata\x12\x15.metadata.IMDbRequest\x1a\x1a.metadata.MetadataResponse\"\x00\x12\x46\n\x0fGetShowMetadata\x12\x15.metadata.IMDbRequest\x1a\x1a.metadata.MetadataResponse\"\x00\x12H\n\x0eGetShowSeasons\x12\x15.metadata.IMDbRequest\x1a\x1d.metadata.ShowSeasonsResponse\"\x00\x12=\n\nTMDbToIMDb\x12\x15.metadata.TMDbRequest\x1a\x16.metadata.IMDbResponse\"\x00\x12Q\n\x10\x42\x61tchGetMetadata\x12\x1a.metadata.BatchIMDbRequest\x1a\x1f.metadata.BatchMetadataResponse\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,8 +35,6 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_METADATARESPONSE_METADATAENTRY']._serialized_options = b'8\001'
   _globals['_BATCHMETADATARESPONSE_RESULTSENTRY']._loaded_options = None
   _globals['_BATCHMETADATARESPONSE_RESULTSENTRY']._serialized_options = b'8\001'
-  _globals['_SHOWSEASONSRESPONSE_SEASONSENTRY']._loaded_options = None
-  _globals['_SHOWSEASONSRESPONSE_SEASONSENTRY']._serialized_options = b'8\001'
   _globals['_SEASONINFO_EPISODESENTRY']._loaded_options = None
   _globals['_SEASONINFO_EPISODESENTRY']._serialized_options = b'8\001'
   _globals['_IMDBREQUEST']._serialized_start=36
@@ -52,27 +50,25 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_SEASONSRESPONSE']._serialized_start=309
   _globals['_SEASONSRESPONSE']._serialized_end=377
   _globals['_SEASON']._serialized_start=379
-  _globals['_SEASON']._serialized_end=470
-  _globals['_EPISODE']._serialized_start=472
-  _globals['_EPISODE']._serialized_end=558
-  _globals['_IMDBRESPONSE']._serialized_start=560
-  _globals['_IMDBRESPONSE']._serialized_end=591
-  _globals['_BATCHIMDBREQUEST']._serialized_start=593
-  _globals['_BATCHIMDBREQUEST']._serialized_end=629
-  _globals['_BATCHMETADATARESPONSE']._serialized_start=632
-  _globals['_BATCHMETADATARESPONSE']._serialized_end=794
-  _globals['_BATCHMETADATARESPONSE_RESULTSENTRY']._serialized_start=720
-  _globals['_BATCHMETADATARESPONSE_RESULTSENTRY']._serialized_end=794
-  _globals['_SHOWSEASONSRESPONSE']._serialized_start=797
-  _globals['_SHOWSEASONSRESPONSE']._serialized_end=965
-  _globals['_SHOWSEASONSRESPONSE_SEASONSENTRY']._serialized_start=897
-  _globals['_SHOWSEASONSRESPONSE_SEASONSENTRY']._serialized_end=965
-  _globals['_SEASONINFO']._serialized_start=968
-  _globals['_SEASONINFO']._serialized_end=1129
-  _globals['_SEASONINFO_EPISODESENTRY']._serialized_start=1059
-  _globals['_SEASONINFO_EPISODESENTRY']._serialized_end=1129
-  _globals['_EPISODEINFO']._serialized_start=1131
-  _globals['_EPISODEINFO']._serialized_end=1197
-  _globals['_METADATASERVICE']._serialized_start=1200
-  _globals['_METADATASERVICE']._serialized_end=1738
+  _globals['_SEASON']._serialized_end=433
+  _globals['_EPISODE']._serialized_start=435
+  _globals['_EPISODE']._serialized_end=521
+  _globals['_IMDBRESPONSE']._serialized_start=523
+  _globals['_IMDBRESPONSE']._serialized_end=570
+  _globals['_BATCHIMDBREQUEST']._serialized_start=572
+  _globals['_BATCHIMDBREQUEST']._serialized_end=608
+  _globals['_BATCHMETADATARESPONSE']._serialized_start=611
+  _globals['_BATCHMETADATARESPONSE']._serialized_end=773
+  _globals['_BATCHMETADATARESPONSE_RESULTSENTRY']._serialized_start=699
+  _globals['_BATCHMETADATARESPONSE_RESULTSENTRY']._serialized_end=773
+  _globals['_SHOWSEASONSRESPONSE']._serialized_start=775
+  _globals['_SHOWSEASONSRESPONSE']._serialized_end=847
+  _globals['_SEASONINFO']._serialized_start=850
+  _globals['_SEASONINFO']._serialized_end=1011
+  _globals['_SEASONINFO_EPISODESENTRY']._serialized_start=941
+  _globals['_SEASONINFO_EPISODESENTRY']._serialized_end=1011
+  _globals['_EPISODEINFO']._serialized_start=1013
+  _globals['_EPISODEINFO']._serialized_end=1079
+  _globals['_METADATASERVICE']._serialized_start=1082
+  _globals['_METADATASERVICE']._serialized_end=1620
 # @@protoc_insertion_point(module_scope)

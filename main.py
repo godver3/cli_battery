@@ -7,6 +7,8 @@ from sqlalchemy.exc import OperationalError
 import threading
 from app.grpc_service import serve as grpc_serve
 import logging
+from logging.handlers import RotatingFileHandler
+import os
 
 def initialize_database(app):
     max_retries = 5
@@ -14,55 +16,56 @@ def initialize_database(app):
 
     for attempt in range(max_retries):
         try:
-            print(f"Attempting to initialize database (attempt {attempt + 1}/{max_retries})")
             
             # Initialize the database
             engine = init_db(app)
             
             # Test connection
             with engine.connect() as connection:
-                print("Testing database connection...")
                 connection.execute(text("SELECT 1"))
-                print("Database connection successful")
             
             # Verify tables
             inspector = inspect(engine)
             tables = inspector.get_table_names()
-            print(f"Tables in the database after creation attempt: {tables}")
             
             if "items" not in tables:
-                print("The 'items' table was not created.")
                 raise Exception("The 'items' table was not created.")
             
-            print("Database initialization successful.")
             return engine
         except OperationalError as e:
-            print(f"OperationalError during database initialization: {str(e)}")
             if attempt < max_retries - 1:
-                print(f"Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
             else:
-                print("Failed to connect to the database after multiple attempts.")
                 raise
         except Exception as e:
-            print(f"Unexpected error during database initialization: {str(e)}")
             raise
 
-    print("Database initialization failed after all attempts")
     return None
 
 def run_grpc_server():
     grpc_serve()
 
 if __name__ == '__main__':
+    # Create the log directory if it doesn't exist
+    log_dir = '/user/logs'
+    os.makedirs(log_dir, exist_ok=True)
+
+    # Configure logging
     logging.basicConfig(level=logging.INFO)
+    file_handler = RotatingFileHandler('/user/logs/debug.log', maxBytes=1024 * 1024, backupCount=10)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    
+    # Get the root logger and add the file handler
+    root_logger = logging.getLogger()
+    root_logger.addHandler(file_handler)
+
+    # Get the logger for this module
     logging = logging.getLogger(__name__)
     logging.info("Starting application")
     
     app = create_app()
     engine = initialize_database(app)
     if engine is None:
-        print("Failed to initialize the database. Exiting.")
         import sys
         sys.exit(1)
 

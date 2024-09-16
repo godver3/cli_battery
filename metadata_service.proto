@@ -38,7 +38,6 @@ message SeasonsResponse {
 message Season {
   int32 season_number = 1;
   int32 episode_count = 2;
-  repeated Episode episodes = 3;
 }
 
 message Episode {
@@ -50,6 +49,7 @@ message Episode {
 
 message IMDbResponse {
   string imdb_id = 1;
+  string source = 2;
 }
 
 message BatchIMDbRequest {
@@ -61,7 +61,7 @@ message BatchMetadataResponse {
 }
 
 message ShowSeasonsResponse {
-  map<string, SeasonInfo> seasons = 1;
+  repeated Season seasons = 1;
   string source = 2;
 }
 

@@ -3,6 +3,9 @@ from sqlalchemy.orm import sessionmaker, scoped_session, relationship
 from sqlalchemy.ext.declarative import declarative_base
 from flask import current_app
 from datetime import datetime
+from sqlalchemy import or_, func, cast, String
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.exc import IntegrityError
 
 # Remove the engine creation for now
 Session = scoped_session(sessionmaker())
@@ -71,6 +74,93 @@ class TMDBToIMDBMapping(Base):
     id = Column(Integer, primary_key=True)
     tmdb_id = Column(String, unique=True, index=True)
     imdb_id = Column(String, unique=True, index=True)
+
+class DatabaseManager:
+    @staticmethod
+    def add_or_update_item(imdb_id, title, year=None, item_type=None):
+        with Session() as session:
+            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
+            if item:
+                item.title = title
+                if year is not None:
+                    item.year = year
+                if item_type is not None:
+                    item.type = item_type
+                item.updated_at = datetime.utcnow()
+            else:
+                item = Item(imdb_id=imdb_id, title=title, year=year, type=item_type)
+                session.add(item)
+            session.commit()
+            return item.id
+
+    @staticmethod
+    def add_or_update_metadata(imdb_id, metadata_dict, provider):
+        with Session() as session:
+            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
+            if not item:
+                item = Item(imdb_id=imdb_id, title=metadata_dict.get('title', ''))
+                session.add(item)
+                session.flush()
+
+            item_type = metadata_dict.get('type')
+            if item_type:
+                item.type = item_type
+            elif 'aired_episodes' in metadata_dict:
+                item.type = 'show'
+            else:
+                item.type = 'movie'
+
+            metadata_objects = []
+            for key, value in metadata_dict.items():
+                if key != 'type':
+                    metadata = Metadata(item_id=item.id, key=key, value=value, provider=provider)
+                    metadata_objects.append(metadata)
+            
+            session.bulk_save_objects(metadata_objects)
+            session.commit()
+
+    @staticmethod
+    def get_item(imdb_id):
+        with Session() as session:
+            return session.query(Item).options(joinedload(Item.item_metadata), joinedload(Item.poster)).filter_by(imdb_id=imdb_id).first()
+
+    @staticmethod
+    def get_all_items():
+        with Session() as session:
+            items = session.query(Item).options(joinedload(Item.item_metadata)).all()
+            for item in items:
+                year_metadata = next((m.value for m in item.item_metadata if m.key == 'year'), None)
+            return items
+
+    @staticmethod
+    def delete_item(imdb_id):
+        with Session() as session:
+            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
+            if item:
+                session.delete(item)
+                session.commit()
+                return True
+            return False
+
+    @staticmethod
+    def add_or_update_poster(item_id, image_data):
+        with Session() as session:
+            poster = session.query(Poster).filter_by(item_id=item_id).first()
+            if poster:
+                poster.image_data = image_data
+                poster.last_updated = datetime.utcnow()
+            else:
+                poster = Poster(item_id=item_id, image_data=image_data)
+                session.add(poster)
+            session.commit()
+
+    @staticmethod
+    def get_poster(imdb_id):
+        with Session() as session:
+            item = session.query(Item).filter_by(imdb_id=imdb_id).first()
+            if item and item.poster:
+                return item.poster.image_data
+        return None
 
 def init_db(app):
     engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
